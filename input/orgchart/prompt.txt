@@ -1,0 +1,55 @@
+**Objective:** Extract all table data visible on this **SINGLE PAGE**.
+
+**Context:**
+- You are viewing ONE PAGE of a document.
+- Structurally, this page may contain:
+  1. **New Table**: Starts with a Minister's name and table headers.
+  2. **Continuation**: Continues a table from the previous page (NO Minister name, NO headers).
+  3. **Transition**: Ends one Minister's table and starts another.
+
+**Instructions:**
+
+1. **Identify Page Type & Minister:**
+   - **New Start:** If you see a Minister's name at the top, that is the `Minister`. **EXTRACT ONLY THE NAME. Remove titles like "Hon.", "Mr.", "Dr.", etc.**
+   - **Continuation:** If the page starts with data rows (numbers/items) but NO Minister name header, set `Minister` to `CONTINUATION_FROM_PREVIOUS`. 
+                     Or sometimes it may say something like (Contid) or Continue in brackets or the may notion the idea of continuing the same table for
+                     the previous Minister.
+   - **Transition:** If the data switches from one table to a new Minister's header, split the extraction into TWO blocks.
+
+2. **Handle Headers:**
+   - **Visible Headers:** If headers (e.g., Column I, Column II) are present, use them.
+   - **Missing Headers:** If headers are not visible (continuation), infer the columns based on the alignment of the previous page's structure (typically 3 main columns + numbering). output the rows strictly maintaining the column order.
+
+3. **Strict Row Alignment (CRITICAL):**
+   - **One Number = One Row**.
+   - **Preserve Numbering**: Exact numbering extracted from the text (e.g., "1.", "2.", "(a)") MUST be included in the value string. Do not strip or alter it.
+   - **Handle Blanks**: If "Column I" has an item but "Column II" is blank for that row, you MUST output an empty string `""` for Column II.
+   - **Equal Lengths**: The arrays for `Column I`, `Column II`, and `Column III` MUST have the exact same number of elements.
+
+4. **Output Constraint:**
+   - Output data in JSON format.
+   - **Format:**
+     ```json
+     {
+        "Minister": "Extracted Name OR CONTINUATION_FROM_PREVIOUS",
+        "Column I": ["1. Item A", "2. Item B", "3. Item C"],
+        "Column II": ["1. Item X", "", "3. Item Z"],
+        "Column III": ["1. Item P", "2. Item Q", ""]
+     }
+     ```
+   - **Note on Continuations**: 
+     - If the table continues from the previous page and has NO header, use `"Minister": "CONTINUATION_FROM_PREVIOUS"`.
+     - If it has a header like "Hon. Name (Contd.)", extract `"Minister": "Hon. Name (Contd.)"`.
+     }
+     ```
+
+5. **Metadata:**
+   - Extract metadata in a **Markdown JSON code block**.
+   - If it is a continuation and you cannot find metadata, output `null` for those fields.
+     ```json
+     {
+       "minister_name": "Name OR CONTINUATION_FROM_PREVIOUS",
+       "page_context": "start" | "continuation" | "transition"
+       "page_number": "Page number where this table appears"
+     }
+     ```
