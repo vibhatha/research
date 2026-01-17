@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Act } from "@/lib/types"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Treemap, Cell } from "recharts"
+import { LineageView } from "@/components/acts/LineageView"
 
 const COLORS = [
     "#8884d8", "#83a6ed", "#8dd1e1", "#82ca9d", "#a4de6c", "#d0ed57",
@@ -77,6 +78,7 @@ export function Dashboard({ data }: { data: Act[] }) {
                 <TabsList>
                     <TabsTrigger value="year">By Year</TabsTrigger>
                     <TabsTrigger value="category">By Category</TabsTrigger>
+                    <TabsTrigger value="lineage">Dependency Graph</TabsTrigger>
                 </TabsList>
                 <TabsContent value="year" className="space-y-4">
                     <Card className="col-span-4">
@@ -147,6 +149,19 @@ export function Dashboard({ data }: { data: Act[] }) {
                                     }} />
                                 </Treemap>
                             </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                <TabsContent value="lineage" className="space-y-4">
+                    <Card className="col-span-4 border-none shadow-none">
+                        <CardHeader className="px-0">
+                            <CardTitle>Act Dependency Tree</CardTitle>
+                            <CardDescription>
+                                Visualize the evolution and amendments of Acts.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="px-0">
+                            <LineageView />
                         </CardContent>
                     </Card>
                 </TabsContent>

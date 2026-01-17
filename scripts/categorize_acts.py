@@ -15,7 +15,7 @@ DOMAIN_KEYWORDS = {
         'prison', 'rights', 'constitution', 'judicial', 'mediation'
     ],
     'Education': [
-        'education', 'university', 'college', 'school', 'institute', 'academy', 'training', 
+        'education', 'university', 'universities', 'college', 'school', 'institute', 'academy', 'training', 
         'scholarship', 'academic', 'library', 'exam'
     ],
     'Research & Technology': [

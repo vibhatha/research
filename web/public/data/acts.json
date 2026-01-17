@@ -3597,7 +3597,7 @@
     "lang": "en",
     "url_pdf": "https://documents.gov.lk/view/acts/2016/10/17-2016_E.pdf",
     "doc_number": "17/2016",
-    "domain": "Other",
+    "domain": "Education",
     "year": "2016"
   },
   {
@@ -6600,7 +6600,7 @@
     "lang": "en",
     "url_pdf": "https://documents.gov.lk/view/acts/2009/10/57-2009_E.pdf",
     "doc_number": "57/2009",
-    "domain": "Other",
+    "domain": "Education",
     "year": "2009"
   },
   {
@@ -15793,5 +15793,30 @@
     "doc_number": "02/1981",
     "domain": "Administration",
     "year": "1981"
+  },
+  {
+    "doc_type": "Other",
+    "doc_id": "",
+    "num": "",
+    "date_str": "",
+    "description": "",
+    "url_metadata": "",
+    "lang": "",
+    "url_pdf": "",
+    "doc_number": "",
+    "domain": ""
+  },
+  {
+    "doc_type": "lk_acts",
+    "doc_id": "universities-act-16-1978",
+    "num": "16-1978-en",
+    "date_str": "1978-01-01",
+    "description": "Universities Act No. 16 of 1978",
+    "url_metadata": "https://www.ugc.ac.lk/index.php?option=com_content&view=article&id=49%3Auniversities-act-no-16-of-1978&catid=6%3Auniversities-act&Itemid=195&lang=en",
+    "lang": "en",
+    "url_pdf": "/pdfs/universities-act-16-1978.pdf",
+    "doc_number": "16/1978",
+    "domain": "Education",
+    "year": "1978"
   }
 ]
