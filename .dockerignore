@@ -1,0 +1,19 @@
+.git
+.gitignore
+.DS_Store
+__pycache__
+*.pyc
+*.pyo
+venv/
+.venv/
+env/
+web/node_modules/
+web/.next/
+acts/research/archive/
+# Keep raw data if needed? Backend needs acts.json or TSV. 
+# If they are large, maybe we should mount them instead of copying?
+# For now, let's exclude the huge archive if it's not strictly code.
+# But analyze_act_by_id needs data. 
+# Implementation Plan says acts/research/archive/docs_en.tsv.
+# If that file is huge, the build will be slow.
+# Let's assume for now we keep the data but ignore git and node_modules which are the usual culprits.

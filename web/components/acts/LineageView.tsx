@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown, GitCommit, FileText, ArrowDown } from "lucide-react"
+import { Check, ChevronsUpDown, GitCommit, FileText, ArrowDown, Sparkles } from "lucide-react"
+import Link from "next/link"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -20,7 +21,6 @@ import {
 } from "@/components/ui/popover"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ActFamily, ActVersion } from "@/lib/types"
-import { Badge } from "@/components/ui/badge"
 
 import { LineagePatcher } from "./LineagePatcher"
 import { LineageGraph } from "./LineageGraph"
@@ -102,9 +102,19 @@ export function LineageView() {
             </div>
 
             {selectedFamily && (
-                <LineageGraph family={selectedFamily}>
-                    <LineagePatcher baseTitle={selectedFamily.versions[0]?.title || selectedFamily.base_title} />
-                </LineageGraph>
+                <div className="space-y-4">
+                    <div className="flex items-center justify-end">
+                        <Link href={`/acts/analyze/${selectedFamily.versions[0]?.doc_id}`}>
+                            <Button variant="secondary" className="gap-2">
+                                <Sparkles className="h-4 w-4" />
+                                Analyze Base Act
+                            </Button>
+                        </Link>
+                    </div>
+                    <LineageGraph family={selectedFamily}>
+                        <LineagePatcher baseTitle={selectedFamily.versions[0]?.title || selectedFamily.base_title} />
+                    </LineageGraph>
+                </div>
             )}
         </div>
     )

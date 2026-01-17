@@ -4,6 +4,7 @@ from ldf.utils import find_project_root
 from ldf.research.categorize import categorize_acts
 from ldf.research.lineage import generate_lineage_json
 from ldf.research.process import process_acts
+from ldf.research.analyze import analyze_with_llm, extract_text_fallback, fetch_pdf
 from ldf.research.versions import init_versioning, apply_patch, list_versions, get_head_path
 
 PROJECT_ROOT = find_project_root()
@@ -47,7 +48,34 @@ def cmd_process():
 @research.group("version")
 def version_group():
     """Manage data versions."""
+    """Manage data versions."""
     pass
+
+@research.command("analyze")
+@click.argument("target", required=True) 
+@click.option("--api-key", required=True, help="Google API Key")
+@click.option("--by-id", is_flag=True, help="Treat target as doc_id instead of path")
+def cmd_analyze(target, api_key, by_id):
+    """Analyze a local PDF or Act by ID using Gemini."""
+    import json
+    from ldf.research.analyze import analyze_act_by_id
+    
+    try:
+        if by_id:
+            data_path = get_head_path()
+            result_json = analyze_act_by_id(target, api_key, data_path, PROJECT_ROOT)
+        else:
+            result_json = analyze_with_llm(Path(target), api_key)
+        
+        if not result_json:
+             result_json = json.dumps({"error": "Empty response from LLM"})
+        
+        # Ensure we only print JSON
+        print(result_json)
+    except Exception as e:
+        import traceback
+        traceback.print_exc() # print stack to stderr
+        print(json.dumps({"error": str(e)})) # Print JSON error for API route to parse safely
 
 @version_group.command("init")
 def cmd_ver_init():

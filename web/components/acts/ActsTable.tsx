@@ -15,7 +15,8 @@ import {
     getFacetedUniqueValues,
     useReactTable,
 } from "@tanstack/react-table"
-import { ArrowUpDown, ChevronDown, MoreHorizontal, FileText } from "lucide-react"
+import { ArrowUpDown, ChevronDown, MoreHorizontal, FileText, Sparkles } from "lucide-react"
+import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -95,12 +96,20 @@ export const columns: ColumnDef<Act>[] = [
             const act = row.original
 
             return (
-                <a href={act.url_pdf} target="_blank" rel="noopener noreferrer">
-                    <Button variant="ghost" size="sm">
-                        <FileText className="h-4 w-4 mr-2" />
-                        PDF
-                    </Button>
-                </a>
+                <div className="flex gap-2">
+                    <a href={act.url_pdf} target="_blank" rel="noopener noreferrer">
+                        <Button variant="ghost" size="sm">
+                            <FileText className="h-4 w-4 mr-2" />
+                            PDF
+                        </Button>
+                    </a>
+                    <Link href={`/acts/analyze/${act.doc_id}`}>
+                        <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700">
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Analyze
+                        </Button>
+                    </Link>
+                </div>
             )
         },
     },

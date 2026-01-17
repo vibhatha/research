@@ -6,5 +6,9 @@ dependencies:
   - python>=3.10
   - pip
   - click
+  - google-genai
+  - pypdf
+  - fastapi
+  - uvicorn
   - pip:
     - -e .

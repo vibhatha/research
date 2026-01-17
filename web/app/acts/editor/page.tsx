@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Check, ChevronsUpDown, Download, Plus, Trash2, ArrowLeft, Info } from "lucide-react"
+import { Check, ChevronsUpDown, Download, Plus, Trash2, ArrowLeft, Info, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
@@ -138,6 +138,14 @@ export default function LineageEditorPage() {
                     <h1 className="text-3xl font-bold">Lineage Editor</h1>
                 </div>
                 <div className="flex items-center gap-2">
+                    {selectedFamily && (
+                        <Link href={`/acts/analyze/${selectedFamily.versions[0]?.doc_id}`}>
+                            <Button variant="secondary" className="gap-2">
+                                <Sparkles className="h-4 w-4" />
+                                Analyze Base Act
+                            </Button>
+                        </Link>
+                    )}
                     <Popover open={openFamily} onOpenChange={setOpenFamily}>
                         <PopoverTrigger asChild>
                             <Button variant="outline" role="combobox" className="w-[300px] justify-between">
