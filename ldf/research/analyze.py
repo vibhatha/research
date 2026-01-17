@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import requests
+import sys
 from pypdf import PdfReader
 
 def fetch_pdf(url: str, save_path: Path) -> Path:
@@ -22,28 +23,17 @@ def extract_text_fallback(pdf_path: Path) -> str:
         text += page.extract_text() + "\n"
     return text
 
-def analyze_with_llm(pdf_path: Path, api_key: str) -> dict:
+def analyze_base(pdf_path: Path, api_key: str) -> dict:
     """
-    Analyzes a PDF using Google GenAI SDK (Gemini).
-    
-    Args:
-        pdf_path: Path to the local PDF file.
-        api_key: Google Gemini API Key.
-        
-    Returns:
-        JSON string containing the analysis.
+    Performs the base structural analysis (Summary, Sections, Entities).
+    Returns dict with 'text' (JSON string) and token metrics.
     """
     from google import genai
-    from google.genai import types
     
     client = genai.Client(api_key=api_key)
-    
-    # Upload the file
-    # The new SDK might use different upload syntax, assuming client.files.upload based on search
-    # If standard pattern holds:
     file = client.files.upload(file=pdf_path)
     
-    prompt = """
+    base_prompt = """
     Analyze this legislative act document in detail. 
     Extract the content into a structured JSON object with the following fields:
 
@@ -54,28 +44,26 @@ def analyze_with_llm(pdf_path: Path, api_key: str) -> dict:
         - "content": The full text content of the section.
         - "footnotes": A list of strings containing any side notes, margin notes, or footnotes associated with this section. 
     4. "amendments": (If applicable) A list of specific amendments made, including:
-        - "target_section": The section being amended.
         - "type": e.g., "Repeal", "Substitution", "Insertion".
+    5. "entities": A list of objects representing key entities (Departments, Ministries, Persons, Institutes) mentioned in the text. Each object should contain:
+        - "entity_name": The name of the entity (e.g., "Department of Agriculture", "Minister of Finance", "University of Colombo").
+        - "entity_type": One of "Department", "Ministry", "Person", "Institute", or "Other".
+        - "excerpt": A brief text excerpt from the document where this entity is mentioned.
     
     Ensure the output is pure JSON.
     """
     
-    # Generate content
     response = client.models.generate_content(
         model="gemini-2.0-flash",
-        contents=[file, prompt]
+        contents=[file, base_prompt]
     )
     
-    text = response.text
-    # Sanitize markdown code blocks if present
+    text = response.text.strip()
     if text.startswith("```"):
         import re
-        # Remove first line (```json keys) and last line (```)
-        text = re.sub(r"^```[a-zA-Z]*\n", "", text)
-        text = re.sub(r"\n```$", "", text)
+        text = re.sub(r"^```[a-zA-Z]*\s+", "", text)
+        text = re.sub(r"\s+```$", "", text)
     
-    # Extract usage
-    # usage_metadata structure usually has prompt_token_count and candidates_token_count
     input_tokens = 0
     output_tokens = 0
     if response.usage_metadata:
@@ -83,19 +71,55 @@ def analyze_with_llm(pdf_path: Path, api_key: str) -> dict:
         output_tokens = response.usage_metadata.candidates_token_count or 0
         
     return {
-        "text": text.strip(),
+        "text": text,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "model": "gemini-2.0-flash"
     }
 
-def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: Path) -> dict:
+def analyze_custom(pdf_path: Path, api_key: str, custom_prompt: str) -> dict:
     """
-    Analyzes an act by its ID, handling PDF download automatically.
-    Returns dict with text and metrics.
+    Performs a specific user query analysis.
+    Returns dict with 'answer' (string) and token metrics.
+    """
+    from google import genai
+    
+    client = genai.Client(api_key=api_key)
+    file = client.files.upload(file=pdf_path)
+    
+    prompt = f"""
+    You are legally analyzing this document.
+    The user has a specific question/instruction: "{custom_prompt}"
+    
+    Provide a direct, detailed answer based strictly on the document content.
+    """
+    
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[file, prompt]
+    )
+    
+    input_tokens = 0
+    output_tokens = 0
+    if response.usage_metadata:
+        input_tokens = response.usage_metadata.prompt_token_count or 0
+        output_tokens = response.usage_metadata.candidates_token_count or 0
+        
+    return {
+        "answer": response.text.strip(),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens
+    }
+
+def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: Path, custom_prompt: str = None) -> dict:
+    """
+    Analyzes an act by its ID, using caching for base structure.
     """
     import csv
+    import json
+    from ldf.research.db import Session, engine, select, ActAnalysis, AnalysisHistory
     
+    # ... (Keep existing path finding logic) ...
     # Find Act Metadata
     act_data = None
     with open(data_path, 'r', encoding='utf-8') as f:
@@ -109,31 +133,96 @@ def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: 
         raise ValueError(f"Act with ID {doc_id} not found in {data_path}")
 
     # Determine PDF Path
-    # URL: https://documents.gov.lk/view/acts/2016/10/17-2016_E.pdf
-    # or /pdfs/universities-act-16-1978.pdf (if relative)
-    
     url_pdf = act_data['url_pdf']
     if not url_pdf:
         raise ValueError(f"No PDF URL found for act {doc_id}")
 
-    # Determine save path
-    # Assuming standard structure: web/public/pdfs/{doc_id}.pdf
     pdf_dir = project_root / 'web/public/pdfs'
     pdf_dir.mkdir(parents=True, exist_ok=True)
     pdf_path = pdf_dir / f"{doc_id}.pdf"
     
     if not pdf_path.exists():
-        import sys
         print(f"Downloading PDF from {url_pdf}...", file=sys.stderr)
-        # Handle relative URLs ?? 
-        # For now assume mostly absolute or fixable. 
-        # If relative starting with /, might need base domain.
         if url_pdf.startswith('/'):
-             # Known domain from dataset or hardcode
-             base_domain = "https://documents.gov.lk" # CAUTION: Assumption
+             base_domain = "https://documents.gov.lk"
              url_pdf = base_domain + url_pdf
-             
         fetch_pdf(url_pdf, pdf_path)
     
-    return analyze_with_llm(pdf_path, api_key)
+    # --- Caching Logic ---
+    base_json_str = None
+    input_tokens = 0
+    output_tokens = 0
+    model_used = "cached"
+
+    with Session(engine) as session:
+        cached = session.get(ActAnalysis, doc_id)
+        if cached:
+            base_json_str = cached.content_json
+            model_used = cached.model
+    
+    if not base_json_str:
+        # Run Base Analysis
+        print(f"Running Base Analysis for {doc_id}...", file=sys.stderr)
+        base_res = analyze_base(pdf_path, api_key)
+        base_json_str = base_res["text"]
+        input_tokens += base_res["input_tokens"]
+        output_tokens += base_res["output_tokens"]
+        model_used = base_res["model"]
+        
+        # Save to DB
+        with Session(engine) as session:
+            new_record = ActAnalysis(
+                doc_id=doc_id,
+                model=model_used,
+                content_json=base_json_str
+            )
+            session.add(new_record)
+            session.commit()
+            
+            # Save Base Analysis to History as well
+            base_history = AnalysisHistory(
+                doc_id=doc_id,
+                prompt="Base Analysis",
+                response=base_json_str,
+                model=model_used
+            )
+            session.add(base_history)
+            session.commit()
+            
+    # Parse Base Data
+    try:
+        data = json.loads(base_json_str)
+    except json.JSONDecodeError:
+        # If cached data is bad, we might want to re-run, but for now raise
+        raise ValueError("Cached analysis data is corrupted.")
+
+    # Handle Custom Prompt
+    if custom_prompt:
+        print(f"Running Custom Analysis for {doc_id}...", file=sys.stderr)
+        custom_res = analyze_custom(pdf_path, api_key, custom_prompt)
+        data["custom_analysis"] = custom_res["answer"]
+        input_tokens += custom_res["input_tokens"]
+        output_tokens += custom_res["output_tokens"]
+        model_used = "gemini-2.0-flash" # We definitely used it if custom prompt
+        
+        # Save History
+        with Session(engine) as session:
+            history_record = AnalysisHistory(
+                doc_id=doc_id,
+                prompt=custom_prompt,
+                response=custom_res["answer"],
+                model=model_used
+            )
+            session.add(history_record)
+            session.commit()
+    else:
+        # Ensure custom_analysis key exists even if null
+        data["custom_analysis"] = None
+
+    return {
+        "text": json.dumps(data),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "model": model_used
+    }
 

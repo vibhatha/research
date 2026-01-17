@@ -3,8 +3,10 @@
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Activity, DollarSign, Clock, FileText, Zap, Server } from "lucide-react"
+import { Activity, DollarSign, Clock, FileText, Zap, Server, ArrowLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 interface TelemetryLog {
     id: number
@@ -64,7 +66,15 @@ export default function AnalyticsPage() {
     return (
         <div className="p-8 space-y-8 max-w-7xl mx-auto">
             <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold tracking-tight">System Telemetry</h1>
+                <div className="flex items-center gap-4">
+                    <Link href="/acts">
+                        <Button variant="ghost" size="sm">
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Back
+                        </Button>
+                    </Link>
+                    <h1 className="text-3xl font-bold tracking-tight">System Telemetry</h1>
+                </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Server className="h-4 w-4" />
                     <span>Backend Status: Online</span>

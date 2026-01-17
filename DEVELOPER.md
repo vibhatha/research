@@ -59,7 +59,30 @@ Visit http://localhost:3000 to view the app.
     -   `LineageEditorPage.tsx`: Full-screen editor for creating patches.
     -   `LineagePatcher.tsx`: Quick-edit tool.
 
-## 3. Data Workflows
+## 3. Database Persistence & Backup
+
+The system uses a binary SQLite database (`data/research.db`) for operations, but supports **JSON-based backup and restore** for version control and persistence.
+
+**Standard Dump Path**: `acts/database/dump/analysis_dump.json`
+
+### Backup Data (Dump)
+Save your current analysis results and telemetry logs to JSON:
+```bash
+mamba run -n research python -m ldf.cli research dump-analysis acts/database/dump/analysis_dump.json
+```
+
+### Restore Data (Load)
+Load data from JSON into your local database:
+```bash
+mamba run -n research python -m ldf.cli research load-analysis acts/database/dump/analysis_dump.json
+```
+
+### Docker Persistence
+The Docker container is configured to **automatically restore** data from `acts/database/dump/analysis_dump.json` when it starts. 
+- Always run a dump before stopping containers/pushing code if you want to preserve new data.
+- Ensure `acts/database/dump/analysis_dump.json` is committed to Git if you want to share the dataset.
+
+## 4. Data Workflows
 
 The system uses a TSV file as the source of truth (`acts/research/archive/docs_en_with_domain.tsv`) and generates static JSON for the frontend (`acts.json`, `lineage.json`).
 
@@ -82,7 +105,7 @@ To generate the flat list of acts (`acts.json`) for the table:
 ldf research process
 ```
 
-## 4. Data Versioning & Patching
+## 5. Data Versioning & Patching
 
 We use a version control system for the data itself to ensure integrity and history.
 
@@ -119,7 +142,7 @@ We use a version control system for the data itself to ensure integrity and hist
     ldf research version list
     ```
 
-## 5. Directory Structure
+## 6. Directory Structure
 
 -   `acts/research/archive/`: Raw historical data.
 -   `acts/research/versions/`: Versioned data snapshots (managed by script).
@@ -127,7 +150,7 @@ We use a version control system for the data itself to ensure integrity and hist
 -   `web/public/data/`: Generated JSON files for the frontend application.
 -   `scripts/`: Utilities for data processing.
 
-## 6. LDF Library Usage
+## 7. LDF Library Usage
 
 The `ldf` package can also be used as a Python library for custom scripts or notebooks.
 

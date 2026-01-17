@@ -36,7 +36,7 @@ export default async function ActsPage() {
                         <Link href="/analytics">
                             <Button variant="outline" size="sm">
                                 <Activity className="mr-2 h-4 w-4" />
-                                Analytics
+                                System Observability
                             </Button>
                         </Link>
                     </div>

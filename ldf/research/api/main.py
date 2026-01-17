@@ -15,12 +15,18 @@ sys.path.append(str(Path(__file__).parents[3]))
 
 from ldf.research.analyze import analyze_act_by_id
 from ldf.utils import find_project_root
-from ldf.research.db import create_db_and_tables, TelemetryLog, ActMetadata, engine
+from ldf.research.db import create_db_and_tables, TelemetryLog, ActMetadata, ActAnalysis, engine
+from ldf.research.dump import restore_from_latest_dump
 from sqlmodel import Session, select, func
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
+    # Attempt to restore from latest dump if available
+    try:
+        restore_from_latest_dump()
+    except Exception as e:
+        print(f"Startup restoration failed: {e}", file=sys.stderr)
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -39,6 +45,7 @@ PROJECT_ROOT = find_project_root() or Path(os.getcwd())
 class AnalyzeRequest(BaseModel):
     doc_id: str
     api_key: str
+    custom_prompt: Optional[str] = None
 
 class AnalyticsSummary(BaseModel):
     total_requests: int
@@ -64,7 +71,7 @@ async def analyze(request: AnalyzeRequest):
             head_path = PROJECT_ROOT / 'acts/research/archive/docs_en.tsv'
         
         # Analyze
-        result_dict = analyze_act_by_id(request.doc_id, request.api_key, head_path, PROJECT_ROOT)
+        result_dict = analyze_act_by_id(request.doc_id, request.api_key, head_path, PROJECT_ROOT, request.custom_prompt)
         
         # Parse result text
         text_content = result_dict.get("text", "")
@@ -149,4 +156,43 @@ def get_analytics():
             "avg_latency_ms": float(avg_latency or 0),
             "total_cost_est": float(total_cost or 0),
             "logs": logs
+        }
+
+@app.get("/acts/{doc_id}/history")
+def get_analysis_history(doc_id: str):
+    """Get analysis history for a specific document."""
+    from ldf.research.db import Session, engine, select, AnalysisHistory
+    
+    with Session(engine) as session:
+        statement = select(AnalysisHistory).where(AnalysisHistory.doc_id == doc_id).order_by(AnalysisHistory.timestamp.desc())
+        history = session.exec(statement).all()
+        
+    return [
+        {
+            "id": h.id,
+            "timestamp": h.timestamp.isoformat(),
+            "prompt": h.prompt,
+            "response": h.response,
+            "model": h.model
+        }
+        for h in history
+    ]
+
+@app.get("/history/{history_id}")
+def get_history_item(history_id: int):
+    """Get a specific analysis history item."""
+    from ldf.research.db import Session, engine, select, AnalysisHistory
+    
+    with Session(engine) as session:
+        item = session.get(AnalysisHistory, history_id)
+        if not item:
+            raise HTTPException(status_code=404, detail="History item not found")
+            
+        return {
+            "id": item.id,
+            "timestamp": item.timestamp.isoformat(),
+            "prompt": item.prompt,
+            "response": item.response,
+            "model": item.model,
+            "doc_id": item.doc_id
         }

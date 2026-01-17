@@ -1,49 +1,46 @@
 "use client"
 
 import * as React from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Settings, Sparkles, Save, FileText } from "lucide-react"
+import { Settings, Sparkles, Save, FileText, ArrowLeft, History as HistoryIcon, ExternalLink } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import Link from "next/link"
+import { Textarea } from "@/components/ui/textarea"
 
 // Basic PDF Viewer using iframe
 const PdfViewer = ({ url, refreshTrigger }: { url: string, refreshTrigger: number }) => {
     const [exists, setExists] = React.useState<boolean | null>(null)
 
     React.useEffect(() => {
-        setExists(null) // Reset on trigger
-        fetch(url, { method: 'HEAD' })
-            .then(res => setExists(res.ok))
-            .catch(() => setExists(false))
+        const checkFile = async () => {
+            try {
+                const res = await fetch(url, { method: 'HEAD' })
+                setExists(res.ok)
+            } catch {
+                setExists(false)
+            }
+        }
+        checkFile()
     }, [url, refreshTrigger])
 
-    if (exists === null) return (
-        <div className="w-full h-full bg-slate-100 flex items-center justify-center">
-            <span className="animate-pulse text-muted-foreground">Checking document availability...</span>
+    if (exists === null) return <div className="p-4 text-sm text-muted-foreground">Loading PDF...</div>
+    if (exists === false) return (
+        <div className="p-10 text-center space-y-4">
+            <div className="text-destructive font-medium">PDF Not Found</div>
+            <p className="text-sm text-muted-foreground">Original document could not be located at {url}</p>
         </div>
     )
 
-    if (!exists) {
-        return (
-            <div className="w-full h-full bg-slate-100 flex flex-col items-center justify-center border rounded-lg p-6 text-center">
-                <FileText className="h-10 w-10 text-muted-foreground mb-4 opacity-50" />
-                <h3 className="font-semibold text-lg">Document Ready to Retrieve</h3>
-                <p className="text-muted-foreground max-w-xs mt-2 text-sm">
-                    The source PDF is available. Click <span className="font-semibold text-primary">AI Analyze</span> to fetch it from the government archives and generate insights.
-                </p>
-            </div>
-        )
-    }
-
     return (
-        <div className="w-full h-full bg-slate-100 flex items-center justify-center border rounded-lg overflow-hidden">
+        <div className="w-full h-full border rounded-lg overflow-hidden bg-white">
             <iframe
-                src={url}
+                src={`${url}#view=FitH`}
                 className="w-full h-full"
                 title="PDF Viewer"
             />
@@ -51,9 +48,96 @@ const PdfViewer = ({ url, refreshTrigger }: { url: string, refreshTrigger: numbe
     )
 }
 
+const HistoryDrawer = ({ docId, onSelect }: { docId: string, onSelect: (item: any) => void }) => {
+    const [isOpen, setIsOpen] = React.useState(false)
+    const [history, setHistory] = React.useState<any[]>([])
+    const [loading, setLoading] = React.useState(false)
+
+    const fetchHistory = async () => {
+        setLoading(true)
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+            const res = await fetch(`${apiUrl}/acts/${docId}/history`)
+            if (res.ok) {
+                const data = await res.json()
+                setHistory(data)
+            }
+        } catch (e) {
+            console.error(e)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    React.useEffect(() => {
+        if (isOpen) {
+            fetchHistory()
+        }
+    }, [isOpen])
+
+    return (
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+            <SheetTrigger asChild>
+                <Button variant="outline" size="icon">
+                    <HistoryIcon className="h-4 w-4" />
+                </Button>
+            </SheetTrigger>
+            <SheetContent>
+                <SheetHeader>
+                    <SheetTitle>Analysis History</SheetTitle>
+                    <SheetDescription>
+                        Recent analysis runs.
+                    </SheetDescription>
+                </SheetHeader>
+                <div className="py-6 flex flex-col h-full">
+                    {loading && <div className="text-center text-sm text-muted-foreground">Loading history...</div>}
+                    {!loading && history.length === 0 && (
+                        <div className="text-center text-sm text-muted-foreground">No history found.</div>
+                    )}
+
+                    <div className="space-y-3 overflow-y-auto flex-1 mb-4">
+                        {history.slice(0, 5).map((item) => (
+                            <div
+                                key={item.id}
+                                className="p-3 border rounded cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                                onClick={() => {
+                                    onSelect(item)
+                                    setIsOpen(false)
+                                }}
+                            >
+                                <div className="flex justify-between items-start mb-1">
+                                    <span className="text-xs text-muted-foreground">{new Date(item.timestamp).toLocaleString()}</span>
+                                    <Badge variant={item.prompt === "Base Analysis" ? "default" : "secondary"} className="text-[10px]">
+                                        {item.prompt === "Base Analysis" ? "Base" : "Custom"}
+                                    </Badge>
+                                </div>
+                                <p className="text-sm font-medium line-clamp-2" title={item.prompt}>
+                                    "{item.prompt}"
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-auto pt-4 border-t">
+                        <Link href={`/acts/analyze/${docId}/history`}>
+                            <Button variant="outline" className="w-full gap-2">
+                                <ExternalLink className="h-3 w-3" />
+                                View Full History
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+            </SheetContent>
+        </Sheet>
+    )
+}
+
 export default function AnalysisPage() {
     const params = useParams()
+    const searchParams = useSearchParams()
+    const router = useRouter()
     const id = params.id as string
+    const historyId = searchParams.get("history_id")
 
     // State
     const [apiKey, setApiKey] = React.useState("")
@@ -61,12 +145,57 @@ export default function AnalysisPage() {
     const [isAnalyzing, setIsAnalyzing] = React.useState(false)
     const [analysisData, setAnalysisData] = React.useState<any>(null)
     const [pdfRefresh, setPdfRefresh] = React.useState(0)
+    const [customPrompt, setCustomPrompt] = React.useState("")
 
     // Load key from session storage on mount
     React.useEffect(() => {
         const storedKey = sessionStorage.getItem("gemini_api_key")
         if (storedKey) setApiKey(storedKey)
     }, [])
+
+    // Restore from history if ID is present
+    React.useEffect(() => {
+        if (!historyId) return
+
+        const fetchHistoryItem = async () => {
+            try {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+                const res = await fetch(`${apiUrl}/history/${historyId}`)
+                if (res.ok) {
+                    const h = await res.json()
+
+                    if (h.prompt === "Base Analysis") {
+                        try {
+                            const baseData = JSON.parse(h.response)
+                            setAnalysisData(baseData)
+                            setCustomPrompt("")
+                        } catch (e) {
+                            console.error("Failed to parse base history", e)
+                        }
+                    } else {
+                        // Better strategy: If we have no analysisData, verify if we can fetch base. 
+                        // But for simplicity in this iteration:
+                        setCustomPrompt(h.prompt)
+                        setAnalysisData((prev: any) => {
+                            if (!prev) {
+                                // Fallback: try to just show custom analysis roughly
+                                return { summary: "Loaded from history (Base context missing)", custom_analysis: h.response }
+                            }
+                            return {
+                                ...prev,
+                                custom_analysis: h.response
+                            }
+                        })
+                    }
+                    // Clean URL
+                    router.replace(`/acts/analyze/${id}`)
+                }
+            } catch (e) {
+                console.error("Failed to load history item", e)
+            }
+        }
+        fetchHistoryItem()
+    }, [historyId, id, router])
 
     // Save key to session storage when changed
     const handleKeyChange = (val: string) => {
@@ -90,7 +219,7 @@ export default function AnalysisPage() {
             const res = await fetch(`${apiUrl}/analyze`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ doc_id: id, api_key: apiKey })
+                body: JSON.stringify({ doc_id: id, api_key: apiKey, custom_prompt: customPrompt })
             })
 
             const data = await res.json()
@@ -135,6 +264,11 @@ export default function AnalysisPage() {
             {/* Header */}
             <header className="h-14 border-b px-4 flex items-center justify-between bg-background">
                 <div className="flex items-center gap-2">
+                    <Link href="/acts">
+                        <Button variant="ghost" size="icon">
+                            <ArrowLeft className="h-5 w-5 text-muted-foreground" />
+                        </Button>
+                    </Link>
                     <FileText className="h-5 w-5 text-muted-foreground" />
                     <span className="font-semibold">Analysis: {id}</span>
                 </div>
@@ -142,9 +276,8 @@ export default function AnalysisPage() {
                 <div className="flex items-center gap-2">
                     <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
                         <SheetTrigger asChild>
-                            <Button variant="outline" className="gap-2">
+                            <Button variant="outline" size="icon">
                                 <Settings className="h-4 w-4" />
-                                Settings
                             </Button>
                         </SheetTrigger>
                         <SheetContent>
@@ -164,22 +297,35 @@ export default function AnalysisPage() {
                                         onChange={e => handleKeyChange(e.target.value)}
                                     />
                                     <p className="text-xs text-muted-foreground">
-                                        Required for "AI Analyze" feature.
+                                        Required for &quot;AI Analyze&quot; feature.
                                     </p>
                                 </div>
                             </div>
                         </SheetContent>
                     </Sheet>
 
-                    <Button
-                        onClick={handleAnalyze}
-                        disabled={isAnalyzing}
-                        className="gap-2"
-                        variant={hasKey ? "default" : "secondary"}
-                    >
-                        {isAnalyzing ? "Analyzing..." : "AI Analyze"}
-                        <Sparkles className="h-4 w-4" />
-                    </Button>
+                    <HistoryDrawer docId={id} onSelect={(h: any) => {
+                        if (h.prompt === "Base Analysis") {
+                            try {
+                                const baseData = JSON.parse(h.response);
+                                setAnalysisData(baseData);
+                                setCustomPrompt(""); // Clear custom since we reverted to base
+                            } catch (e) {
+                                console.error("Failed to parse base history", e);
+                            }
+                        } else {
+                            if (!analysisData) {
+                                alert("Please run or load a base analysis first to view context.");
+                                return;
+                            }
+                            setCustomPrompt(h.prompt);
+                            setAnalysisData((prev: any) => ({
+                                ...prev,
+                                custom_analysis: h.response
+                            }));
+                        }
+                    }} />
+
 
                     <Button
                         variant="outline"
@@ -203,13 +349,54 @@ export default function AnalysisPage() {
                 {/* Right: Annotations / Assistant */}
                 <div className="p-4 h-full overflow-y-auto bg-background">
                     <Card className="h-full border-none shadow-none flex flex-col">
-                        <CardHeader className="px-0 pt-0 pb-4 border-b mb-4">
-                            <CardTitle>Analysis Results</CardTitle>
+                        <CardHeader className="px-0 pt-0 pb-4 border-b mb-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Analysis Results</CardTitle>
+                                {analysisData && (
+                                    <Badge variant="outline" className="text-xs font-normal">
+                                        {analysisData.model || "gemini-2.0-flash"}
+                                    </Badge>
+                                )}
+                            </div>
+
+                            {/* Analysis Input Area */}
+                            <div className="flex gap-2 items-start">
+                                <Textarea
+                                    placeholder="Enter custom instructions or ask a question (leave empty for base analysis)..."
+                                    value={customPrompt}
+                                    onChange={e => setCustomPrompt(e.target.value)}
+                                    className="min-h-[80px] text-sm resize-y"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                            handleAnalyze();
+                                        }
+                                    }}
+                                />
+                                <Button
+                                    onClick={handleAnalyze}
+                                    disabled={isAnalyzing}
+                                    className="h-[80px] w-[80px] flex-shrink-0 flex flex-col gap-1"
+                                    variant={hasKey ? "default" : "secondary"}
+                                    title={hasKey ? "Run Analysis (Cmd+Enter)" : "Set API Key first"}
+                                >
+                                    {isAnalyzing ? (
+                                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    ) : (
+                                        <Sparkles className="h-5 w-5" />
+                                    )}
+                                    <span className="text-xs">{isAnalyzing ? "Running" : "Analyze"}</span>
+                                </Button>
+                            </div>
+                            {!hasKey && (
+                                <p className="text-xs text-destructive">
+                                    * API Key missing. Configure in <span className="font-bold cursor-pointer" onClick={() => setIsSettingsOpen(true)}>Settings</span>.
+                                </p>
+                            )}
                         </CardHeader>
                         <CardContent className="px-0 flex-1 overflow-y-auto space-y-6">
                             {!analysisData ? (
                                 <div className="text-center text-muted-foreground py-10">
-                                    No analysis data. Click "AI Analyze" to start.
+                                    No analysis data. Click &quot;AI Analyze&quot; to start.
                                 </div>
                             ) : (
                                 <>
@@ -218,6 +405,43 @@ export default function AnalysisPage() {
                                         <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Summary</h3>
                                         <p className="text-sm leading-relaxed">{analysisData.summary || "No summary available."}</p>
                                     </div>
+
+                                    {analysisData.custom_analysis && (
+                                        <>
+                                            <Separator />
+                                            <div className="space-y-2 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
+                                                <h3 className="font-semibold text-sm uppercase text-blue-600 dark:text-blue-400 tracking-wider flex items-center gap-2">
+                                                    <Sparkles className="h-3 w-3" />
+                                                    Custom Analysis
+                                                </h3>
+                                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{analysisData.custom_analysis}</p>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <Separator />
+
+                                    {/* Entities Section */}
+                                    {analysisData.entities && analysisData.entities.length > 0 && (
+                                        <div className="space-y-4">
+                                            <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Key Entities</h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                {analysisData.entities.map((entity: any, i: number) => (
+                                                    <div key={i} className="p-3 border rounded-md bg-card space-y-1">
+                                                        <div className="flex items-start justify-between">
+                                                            <div className="font-medium text-sm">{entity.entity_name}</div>
+                                                            <Badge variant="outline" className="text-[10px] uppercase">{entity.entity_type}</Badge>
+                                                        </div>
+                                                        {entity.excerpt && (
+                                                            <p className="text-xs text-muted-foreground italic line-clamp-2" title={entity.excerpt}>
+                                                                &quot;{entity.excerpt}&quot;
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <Separator />
 
@@ -279,8 +503,16 @@ export default function AnalysisPage() {
                             )}
                         </CardContent>
                     </Card>
-                </div>
-            </main>
-        </div>
+                </div >
+            </main >
+            {/* Debug URL */}
+            {
+                historyId && (
+                    <div className="fixed bottom-4 right-4 bg-yellow-100 p-2 rounded border border-yellow-300 text-xs">
+                        Restoring valid history: {historyId}
+                    </div>
+                )
+            }
+        </div >
     )
 }

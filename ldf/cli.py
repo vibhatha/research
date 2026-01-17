@@ -1,10 +1,11 @@
+
 import click
 from pathlib import Path
 from ldf.utils import find_project_root
 from ldf.research.categorize import categorize_acts
 from ldf.research.lineage import generate_lineage_json
 from ldf.research.process import process_acts
-from ldf.research.analyze import analyze_with_llm, extract_text_fallback, fetch_pdf
+from ldf.research.analyze import analyze_base, analyze_custom, analyze_act_by_id, extract_text_fallback, fetch_pdf
 from ldf.research.versions import init_versioning, apply_patch, list_versions, get_head_path
 
 PROJECT_ROOT = find_project_root()
@@ -65,7 +66,7 @@ def cmd_analyze(target, api_key, by_id):
             data_path = get_head_path()
             result_json = analyze_act_by_id(target, api_key, data_path, PROJECT_ROOT)
         else:
-            result_json = analyze_with_llm(Path(target), api_key)
+            result_json = analyze_base(Path(target), api_key)
         
         if not result_json:
              result_json = json.dumps({"error": "Empty response from LLM"})
@@ -76,6 +77,48 @@ def cmd_analyze(target, api_key, by_id):
         import traceback
         traceback.print_exc() # print stack to stderr
         print(json.dumps({"error": str(e)})) # Print JSON error for API route to parse safely
+
+@research.command()
+def migrate():
+    """Migrate Acts JSON to SQLite."""
+    from ldf.research.migrate import migrate_acts_json_to_sqlite
+    migrate_acts_json_to_sqlite()
+
+@research.command()
+@click.argument("output_path", required=False, type=click.Path(path_type=Path))
+def dump_analysis(output_path):
+    """
+    Dump analysis cache to JSON file.
+    
+    If OUTPUT_PATH is not provided, defaults to saving versioned and latest dumps
+    in 'acts/database/dump/'.
+    """
+    from datetime import datetime
+    from ldf.research.dump import dump_analysis_to_json
+    
+    paths = []
+    
+    if output_path:
+        paths.append(output_path)
+    else:
+        # Default behavior: Versioned + Latest
+        dump_dir = PROJECT_ROOT / "acts/database/dump"
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Local time for versioning
+        now_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        versioned_name = f"analysis_dump_{now_str}.json"
+        
+        paths.append(dump_dir / versioned_name)
+        
+    dump_analysis_to_json(paths)
+
+@research.command()
+@click.argument("input_path", type=click.Path(exists=True, path_type=Path))
+def load_analysis(input_path):
+    """Load analysis cache from JSON file."""
+    from ldf.research.dump import load_analysis_from_json
+    load_analysis_from_json(input_path)
 
 @version_group.command("init")
 def cmd_ver_init():
@@ -96,3 +139,4 @@ def cmd_ver_apply(file):
 
 if __name__ == '__main__':
     cli()
+

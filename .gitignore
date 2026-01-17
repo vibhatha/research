@@ -45,3 +45,15 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Database
+*.db
+*.sqlite3
+data/
+!data/.gitkeep
+research.db
+
+# Logs
+logs/
+*.log
+

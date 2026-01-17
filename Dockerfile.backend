@@ -27,4 +27,5 @@ RUN pip install -e .
 EXPOSE 8000
 
 # Run FastAPI
-CMD ["uvicorn", "ldf.research.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run Startup Script
+CMD ["/bin/bash", "scripts/start_backend.sh"]
