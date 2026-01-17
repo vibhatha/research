@@ -86,7 +86,19 @@ export function LineagePatcher({ baseTitle }: { baseTitle: string }) {
         const patch = {
             parent_act: parent,
             changes: relations,
-            timestamp: new Date().toISOString(),
+            timestamp: (function () {
+                const date = new Date();
+                const offset = -date.getTimezoneOffset();
+                const diff = offset >= 0 ? '+' : '-';
+                const pad = (n: number) => (n < 10 ? '0' : '') + n;
+                return date.getFullYear() +
+                    '-' + pad(date.getMonth() + 1) +
+                    '-' + pad(date.getDate()) +
+                    'T' + pad(date.getHours()) +
+                    ':' + pad(date.getMinutes()) +
+                    ':' + pad(date.getSeconds()) +
+                    diff + pad(Math.floor(Math.abs(offset) / 60)) + ':' + pad(Math.abs(offset) % 60);
+            })(),
         }
 
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(patch, null, 2));

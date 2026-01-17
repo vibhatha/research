@@ -1,10 +1,13 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Act } from "@/lib/types"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Treemap, Cell } from "recharts"
 import { LineageView } from "@/components/acts/LineageView"
+import Link from "next/link"
+import { Settings2 } from "lucide-react"
 
 const COLORS = [
     "#8884d8", "#83a6ed", "#8dd1e1", "#82ca9d", "#a4de6c", "#d0ed57",
@@ -72,7 +75,17 @@ export function Dashboard({ data }: { data: Act[] }) {
 
     return (
         <div className="space-y-4 mb-8">
-
+            <div className="flex items-center justify-between">
+                <div>
+                    {/* Placeholder for title if needed, but the page already has a title */}
+                </div>
+                <Link href="/acts/editor">
+                    <Button variant="outline">
+                        <Settings2 className="mr-2 h-4 w-4" />
+                        Lineage Tools
+                    </Button>
+                </Link>
+            </div>
 
             <Tabs defaultValue="year" className="space-y-4">
                 <TabsList>
