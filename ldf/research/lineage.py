@@ -10,11 +10,7 @@ def slug(name: str) -> str:
     name = name.strip("-")
     return name
 
-def main():
-    # Input/Output paths
-    input_path = Path('acts/research/archive/docs_en_with_domain.tsv')
-    output_path = Path('web/public/data/lineage.json')
-    
+def generate_lineage_json(input_path: Path, output_path: Path, patches_dir: Path):
     print(f"Reading from {input_path}")
     
     acts_map = {}
@@ -71,13 +67,17 @@ def main():
             count += 1
 
     # Re-map acts for ID lookup to support the patch logic above
-    all_acts_lookup = {}
-    for fam in acts_map.values():
+    all_acts_lookup_id = {}
+    all_acts_lookup_title = {}
+    id_to_family_map = {}
+
+    for fam_key, fam in acts_map.items():
         for v in fam["versions"]:
-             all_acts_lookup[v["title"]] = v
+             all_acts_lookup_id[v["doc_id"]] = v
+             all_acts_lookup_title[v["title"]] = v
+             id_to_family_map[v["doc_id"]] = fam_key
 
     # --- Patch Application Logic ---
-    patches_dir = Path('web/public/data/patches')
     if patches_dir.exists():
         print(f"Applying patches from {patches_dir}")
         for patch_file in patches_dir.glob('*.json'):
@@ -85,31 +85,55 @@ def main():
                 with open(patch_file, 'r', encoding='utf-8') as f:
                     patch = json.load(f)
                 
-                parent_act = patch.get('parent_act')
-                changes = patch.get('changes', [])
+                # Determine Parent Family
+                parent_key = None
                 
-                if parent_act in acts_map:
+                # Method 1: By Parent ID (Preferred)
+                parent_id = patch.get('parent_id')
+                if parent_id and parent_id in id_to_family_map:
+                    parent_key = id_to_family_map[parent_id]
+                
+                # Method 2: By Parent Title (Legacy)
+                if not parent_key:
+                    parent_act_title = patch.get('parent_act')
+                    if parent_act_title in acts_map:
+                        parent_key = parent_act_title
+                
+                if parent_key and parent_key in acts_map:
+                    changes = patch.get('changes', [])
                     for change in changes:
-                        child_title = change.get('child_act')
+                        child_node = None
+                        
+                        # Child Lookup 1: By ID
+                        child_id = change.get('child_id')
+                        if child_id and child_id in all_acts_lookup_id:
+                            child_node = all_acts_lookup_id[child_id]
+                        
+                        # Child Lookup 2: By Title (Legacy)
+                        if not child_node:
+                            child_title = change.get('child_act')
+                            if child_title and child_title in all_acts_lookup_title:
+                                child_node = all_acts_lookup_title[child_title]
+
                         relation = change.get('relationship')
                         
-                        # Find the child act object
-                        if child_title in all_acts_lookup:
-                            child_act_data = all_acts_lookup[child_title]
-                            
+                        if child_node:
                             # Add to the family
                             # Avoid duplicates
-                            existing_ids = {v['doc_id'] for v in acts_map[parent_act]['versions']}
-                            if child_act_data['doc_id'] not in existing_ids:
+                            existing_ids = {v['doc_id'] for v in acts_map[parent_key]['versions']}
+                            if child_node['doc_id'] not in existing_ids:
                                 # Create a copy to modify if needed (e.g. mark as amendment)
-                                new_version = child_act_data.copy()
+                                new_version = child_node.copy()
                                 if relation == "amended_by":
                                     new_version['is_amendment'] = True
                                 
-                                acts_map[parent_act]['versions'].append(new_version)
-                                print(f"Patched: Added {child_title} to {parent_act}")
+                                acts_map[parent_key]['versions'].append(new_version)
+                                print(f"Patched: Added {child_node['title']} to {parent_key}")
                         else:
-                            print(f"Warning: Could not find act '{child_title}' referenced in patch")
+                            print(f"Warning: Could not find child act referenced in patch {patch_file}")
+                else:
+                    print(f"Warning: Parent Act family not found for patch {patch_file}")
+
              except Exception as e:
                 print(f"Error applying patch {patch_file}: {e}")
 
@@ -133,6 +157,3 @@ def main():
         
     print(f"Processed {count} acts into {len(lineage_data)} families.")
     print(f"Output saved to {output_path}")
-
-if __name__ == "__main__":
-    main()

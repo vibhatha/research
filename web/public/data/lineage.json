@@ -15881,9 +15881,9 @@
         "doc_id": "2016-10-05-2016-10-05-17-2016-en",
         "year": 2016,
         "date": "2016-10-05",
-        "title": "Universities Act",
+        "title": "Universities Act (Amendment)",
         "doc_number": "17/2016",
-        "is_amendment": false,
+        "is_amendment": true,
         "url_pdf": "https://documents.gov.lk/view/acts/2016/10/17-2016_E.pdf"
       }
     ]
@@ -15901,6 +15901,24 @@
         "doc_number": "16/1978",
         "is_amendment": false,
         "url_pdf": "/pdfs/universities-act-16-1978.pdf"
+      },
+      {
+        "doc_id": "2009-10-07-2009-10-07-57-2009-en",
+        "year": 2009,
+        "date": "2009-10-07",
+        "title": "Universities (Amendment)",
+        "doc_number": "57/2009",
+        "is_amendment": true,
+        "url_pdf": "https://documents.gov.lk/view/acts/2009/10/57-2009_E.pdf"
+      },
+      {
+        "doc_id": "2016-10-05-2016-10-05-17-2016-en",
+        "year": 2016,
+        "date": "2016-10-05",
+        "title": "Universities Act (Amendment)",
+        "doc_number": "17/2016",
+        "is_amendment": true,
+        "url_pdf": "https://documents.gov.lk/view/acts/2016/10/17-2016_E.pdf"
       }
     ]
   },

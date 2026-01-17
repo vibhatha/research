@@ -108,7 +108,7 @@
     "doc_id": "2025-09-10-2025-09-10-18-2025-en",
     "num": "2025-09-10-18-2025-en",
     "date_str": "2025-09-10",
-    "description": "PresidentsÃ¢â¬â¢ Entitlements (Repeal)",
+    "description": "Presidents\u00c3\u00a2\u00e2\u0082\u00ac\u00e2\u0084\u00a2 Entitlements (Repeal)",
     "url_metadata": "https://documents.gov.lk/view/acts/acts_2025.html",
     "lang": "en",
     "url_pdf": "https://documents.gov.lk/view/acts/2025/9/18-2025_E.pdf",
@@ -3592,7 +3592,7 @@
     "doc_id": "2016-10-05-2016-10-05-17-2016-en",
     "num": "2016-10-05-17-2016-en",
     "date_str": "2016-10-05",
-    "description": "Universities Act",
+    "description": "Universities Act (Amendment)",
     "url_metadata": "https://documents.gov.lk/view/acts/acts_2016.html",
     "lang": "en",
     "url_pdf": "https://documents.gov.lk/view/acts/2016/10/17-2016_E.pdf",
@@ -15795,16 +15795,7 @@
     "year": "1981"
   },
   {
-    "doc_type": "Other",
-    "doc_id": "",
-    "num": "",
-    "date_str": "",
-    "description": "",
-    "url_metadata": "",
-    "lang": "",
-    "url_pdf": "",
-    "doc_number": "",
-    "domain": ""
+    "doc_type": "Other"
   },
   {
     "doc_type": "lk_acts",

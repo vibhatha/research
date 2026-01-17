@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Check, ChevronsUpDown, Download, Plus, Trash2, ArrowLeft } from "lucide-react"
+import { Check, ChevronsUpDown, Download, Plus, Trash2, ArrowLeft, Info } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
 
@@ -55,7 +56,7 @@ export default function LineageEditorPage() {
 
         // Apply changes
         pendingChanges.forEach(change => {
-            const childAct = allActs.find(a => a.description === change.child_act)
+            const childAct = allActs.find(a => a.doc_id === change.child_id)
             if (childAct) {
                 const newVersion: ActVersion = {
                     doc_id: childAct.doc_id,
@@ -80,7 +81,7 @@ export default function LineageEditorPage() {
     const handleAdd = () => {
         if (!selectedChild) return;
         setPendingChanges([...pendingChanges, {
-            child_act: selectedChild,
+            child_id: selectedChild,
             relationship: selectedRelation,
             notes: notes
         }])
@@ -96,8 +97,12 @@ export default function LineageEditorPage() {
     }
 
     const handleDownload = () => {
+        // Find parent ID - prefer exact match on title, or fallback to first version
+        const parentVersion = selectedFamily?.versions.find(v => v.title === selectedFamily.base_title) || selectedFamily?.versions[0]
+
         const patch = {
-            parent_act: selectedFamily?.base_title,
+            parent_id: parentVersion?.doc_id,
+            parent_title: selectedFamily?.base_title, // Keep title for reference readability
             changes: pendingChanges,
             timestamp: (function () {
                 const date = new Date();
@@ -177,13 +182,22 @@ export default function LineageEditorPage() {
                         <CardDescription>Add amendments or relationships.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        <Alert>
+                            <Info className="h-4 w-4" />
+                            <AlertTitle>Save Location</AlertTitle>
+                            <AlertDescription>
+                                Save downloaded patches to
+                                <span className="font-mono bg-muted px-1 ml-1 rounded">acts/research/patches/</span>
+                            </AlertDescription>
+                        </Alert>
+
                         <div className="space-y-2">
                             <Label>Target Act</Label>
                             <Popover open={openAct} onOpenChange={setOpenAct}>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline" role="combobox" className="w-full justify-between" disabled={!selectedFamily}>
                                         {selectedChild
-                                            ? (allActs.find(a => a.description === selectedChild)?.description.slice(0, 25) + "...")
+                                            ? (allActs.find(a => a.doc_id === selectedChild)?.description.slice(0, 25) + "...")
                                             : "Search Act..."}
                                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                                     </Button>
@@ -199,7 +213,7 @@ export default function LineageEditorPage() {
                                                         key={act.doc_id}
                                                         value={act.description}
                                                         onSelect={(val) => {
-                                                            setSelectedChild(act.description) // use description as value
+                                                            setSelectedChild(act.doc_id)
                                                             setOpenAct(false)
                                                         }}
                                                     >
@@ -244,7 +258,9 @@ export default function LineageEditorPage() {
                                         <li key={i} className="flex items-center justify-between text-sm bg-muted p-2 rounded">
                                             <div className="flex flex-col">
                                                 <span className="font-bold">{c.relationship}</span>
-                                                <span className="truncate w-[180px]">{c.child_act}</span>
+                                                <span className="truncate w-[180px]">
+                                                    {allActs.find(a => a.doc_id === c.child_id)?.description || c.child_id}
+                                                </span>
                                             </div>
                                             <Button variant="ghost" size="icon" onClick={() => handleRemoveChange(i)}>
                                                 <Trash2 className="h-4 w-4 text-red-500" />
