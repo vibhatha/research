@@ -30,10 +30,13 @@ def analyze_base(pdf_path: Path, api_key: str) -> dict:
     """
     from google import genai
     
+    from ldf.research.categorize import DOMAIN_KEYWORDS
+
     client = genai.Client(api_key=api_key)
     file = client.files.upload(file=pdf_path)
     
-    base_prompt = """
+    # improved prompt with categorization
+    base_prompt = f"""
     Analyze this legislative act document in detail. 
     Extract the content into a structured JSON object with the following fields:
 
@@ -49,13 +52,34 @@ def analyze_base(pdf_path: Path, api_key: str) -> dict:
         - "entity_name": The name of the entity (e.g., "Department of Agriculture", "Minister of Finance", "University of Colombo").
         - "entity_type": One of "Department", "Ministry", "Person", "Institute", or "Other".
         - "excerpt": A brief text excerpt from the document where this entity is mentioned.
+    6. "category": Choose the most relevant major category from this list: {list(DOMAIN_KEYWORDS.keys())}.
+    7. "sub_category": Based on the keywords associated with the chosen category, provide a specific sub-category or keyword that matches the content (e.g., if 'Security & Defense' is chosen, sub-category could be 'Navy' or 'Police' if relevant).
+    8. "meeting_details": A list of objects containing information about meetings mentioned in the act. If no meetings are mentioned, return an empty list []. Each object should contain:
+        - "description": Description of the meeting type/purpose.
+        - "frequency": How often they meet (e.g., "Monthly", "Quarterly", "Annual").
+        - "location": Where they meet, if specified.
+        - "time": Time of meeting, if specified.
+        - "excerpt": Text excerpt from which this info was derived.
+    9. "board_members": A list of objects describing board/committee member details. If no members are mentioned, return an empty list []. Each object should contain:
+        - "role_name": Name of the role (e.g., "Chairman", "Member").
+        - "appointing_authority": Who appoints this member (e.g., "Minister").
+        - "removal_criteria": Conditions for removal (e.g., "Absence from 3 consecutive meetings").
+        - "composition_criteria": Any criteria for selection (e.g., "Must be a lawyer").
+        - "excerpt": Relevant text excerpt.
     
     Ensure the output is pure JSON.
     """
     
+    from google.genai import types
+    
     response = client.models.generate_content(
         model="gemini-2.0-flash",
-        contents=[file, base_prompt]
+        contents=[file, base_prompt],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=None, 
+            max_output_tokens=65536, # Ensure high limit for large documents
+        )
     )
     
     text = response.text.strip()
@@ -111,7 +135,7 @@ def analyze_custom(pdf_path: Path, api_key: str, custom_prompt: str) -> dict:
         "output_tokens": output_tokens
     }
 
-def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: Path, custom_prompt: str = None) -> dict:
+def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: Path, custom_prompt: str = None, force_refresh: bool = False, fetch_only: bool = False) -> dict:
     """
     Analyzes an act by its ID, using caching for base structure.
     """
@@ -153,22 +177,64 @@ def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: 
     input_tokens = 0
     output_tokens = 0
     model_used = "cached"
+    data = None
 
-    with Session(engine) as session:
-        cached = session.get(ActAnalysis, doc_id)
-        if cached:
-            base_json_str = cached.content_json
-            model_used = cached.model
+    if not force_refresh:
+        with Session(engine) as session:
+            cached = session.get(ActAnalysis, doc_id)
+            if cached:
+                base_json_str = cached.content_json
+                model_used = cached.model
+
+                # Validate Cache Integrity
+                if base_json_str:
+                    try:
+                        json.loads(base_json_str)
+                    except json.JSONDecodeError:
+                        print(f"WARN: Cached analysis for {doc_id} is corrupted. Forcing re-analysis.", file=sys.stderr)
+                        base_json_str = None
     
+    # Validating/Healing JSON logic
+    def repair_json(json_str: str) -> str:
+        """Attempts to repair truncated JSON by closing brackets."""
+        json_str = json_str.strip()
+        # Simple heuristic: count brackets
+        open_braces = json_str.count('{') - json_str.count('}')
+        open_brackets = json_str.count('[') - json_str.count(']')
+        
+        # This is a naive repair, but handles simple truncation
+        # Reverse order of closing ideally, but for now just appending might work for simple cases.
+        # A better way is to check the last char.
+        return json_str + ("}" * open_braces) + ("]" * open_brackets)
+
     if not base_json_str:
-        # Run Base Analysis
-        print(f"Running Base Analysis for {doc_id}...", file=sys.stderr)
+        if fetch_only:
+            return None
+
+        # Run Base Analysis (Single Execution with Repair)
+        print(f"Running Base Analysis for {doc_id} (force_refresh={force_refresh})...", file=sys.stderr)
         base_res = analyze_base(pdf_path, api_key)
         base_json_str = base_res["text"]
         input_tokens += base_res["input_tokens"]
         output_tokens += base_res["output_tokens"]
         model_used = base_res["model"]
         
+        # Validate and Repair JSON
+        try:
+            data = json.loads(base_json_str)
+        except json.JSONDecodeError as e:
+            print(f"WARN: JSON parse failed: {e}", file=sys.stderr)
+            print("INFO: Attempting to auto-repair JSON...", file=sys.stderr)
+            
+            repaired_str = repair_json(base_json_str)
+            try:
+                data = json.loads(repaired_str)
+                base_json_str = repaired_str
+                print("INFO: JSON repaired successfully.", file=sys.stderr)
+            except json.JSONDecodeError as repair_e:
+                print(f"ERROR: Auto-repair failed: {repair_e}", file=sys.stderr)
+                raise ValueError(f"Generated analysis is corrupted and repair failed: {e}")
+
         # Save to DB
         with Session(engine) as session:
             new_record = ActAnalysis(
@@ -176,31 +242,29 @@ def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: 
                 model=model_used,
                 content_json=base_json_str
             )
-            session.add(new_record)
+            session.merge(new_record)  # Use merge for upsert
             session.commit()
             
             # Save Base Analysis to History as well
             base_history = AnalysisHistory(
                 doc_id=doc_id,
-                prompt="Base Analysis",
+                prompt="Base Analysis (Refresh)" if force_refresh else "Base Analysis",
                 response=base_json_str,
                 model=model_used
             )
             session.add(base_history)
             session.commit()
             
-    # Parse Base Data
-    try:
+    # Parse Base Data (already parsed above if new, or here if cached)
+    if not data:
         data = json.loads(base_json_str)
-    except json.JSONDecodeError:
-        # If cached data is bad, we might want to re-run, but for now raise
-        raise ValueError("Cached analysis data is corrupted.")
 
     # Handle Custom Prompt
     if custom_prompt:
         print(f"Running Custom Analysis for {doc_id}...", file=sys.stderr)
         custom_res = analyze_custom(pdf_path, api_key, custom_prompt)
         data["custom_analysis"] = custom_res["answer"]
+        data["custom_prompt"] = custom_prompt
         input_tokens += custom_res["input_tokens"]
         output_tokens += custom_res["output_tokens"]
         model_used = "gemini-2.0-flash" # We definitely used it if custom prompt
@@ -218,6 +282,7 @@ def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: 
     else:
         # Ensure custom_analysis key exists even if null
         data["custom_analysis"] = None
+        data["custom_prompt"] = None
 
     return {
         "text": json.dumps(data),

@@ -8,10 +8,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Settings, Sparkles, Save, FileText, ArrowLeft, History as HistoryIcon, ExternalLink } from "lucide-react"
+import { Settings, Sparkles, Save, FileText, ArrowLeft, History as HistoryIcon, ExternalLink, ChevronDown, RefreshCcw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { Textarea } from "@/components/ui/textarea"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 // Basic PDF Viewer using iframe
 const PdfViewer = ({ url, refreshTrigger }: { url: string, refreshTrigger: number }) => {
@@ -155,12 +161,20 @@ export default function AnalysisPage() {
     const [pdfRefresh, setPdfRefresh] = React.useState(0)
     const [customPrompt, setCustomPrompt] = React.useState("")
     const [actUrl, setActUrl] = React.useState<string | null>(null)
+    const [showToast, setShowToast] = React.useState(false)
 
     // Load key from session storage on mount
     React.useEffect(() => {
         const storedKey = sessionStorage.getItem("gemini_api_key")
         if (storedKey) setApiKey(storedKey)
     }, [])
+
+    // Auto-load analysis logic
+    React.useEffect(() => {
+        if (id && apiKey && !analysisData && !historyId && !isAnalyzing) {
+            handleAnalyze(false, true)
+        }
+    }, [id, apiKey])
 
     // Restore from history if ID is present
     React.useEffect(() => {
@@ -240,9 +254,32 @@ export default function AnalysisPage() {
     const hasKey = apiKey.length > 0
 
     // Handlers
-    const handleAnalyze = async () => {
+    const handleAnalyze = async (force: boolean = false, fetchOnly: boolean = false) => {
         if (!hasKey) {
+            // If auto-called (force=false), we might simply ignore if NO key, but here we check hasKey.
+            // If checking specifically for User action, we might need a flag.
+            // But logic says: if (!hasKey), open settings.
+            if (!force && !analysisData) {
+                // likely auto-load attempt without key, or user click. 
+                // If user click, we want settings. If auto-load, we want nothing?
+                // But this handler is called by user most times.
+                // We will let it open settings.
+            }
+            if (force) {
+                setIsSettingsOpen(true)
+                return
+            }
+            // If fetchOnly and no key, just return silently?
+            if (fetchOnly) return;
+
             setIsSettingsOpen(true)
+            return
+        }
+
+        // Check if analysis exists and we are NOT forcing a refresh and NOT a custom prompt
+        if (analysisData && !force && !customPrompt && !fetchOnly) {
+            setShowToast(true)
+            setTimeout(() => setShowToast(false), 3000)
             return
         }
 
@@ -252,19 +289,30 @@ export default function AnalysisPage() {
             const res = await fetch(`${apiUrl}/analyze`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ doc_id: id, api_key: apiKey, custom_prompt: customPrompt })
+                body: JSON.stringify({
+                    doc_id: id,
+                    api_key: apiKey,
+                    custom_prompt: customPrompt,
+                    force_refresh: force,
+                    fetch_only: fetchOnly
+                })
             })
 
             const data = await res.json()
             if (res.ok) {
-                // Refresh PDF view as it might have been downloaded
-                setPdfRefresh(prev => prev + 1)
-
-                // Set the raw rich data
-                setAnalysisData(data)
+                if (data.status === "not_found") {
+                    // Fetch Only failed to find data. Do nothing.
+                    // This creates the "Avoid auto-run" behavior.
+                    console.log("No existing analysis found. Waiting for user action.")
+                } else {
+                    // Refresh PDF view as it might have been downloaded
+                    setPdfRefresh(prev => prev + 1)
+                    // Set the raw rich data
+                    setAnalysisData(data)
+                }
             } else {
-                console.error("Analysis failed:", data)
-                alert("Analysis failed: " + (data.error || "Unknown error"))
+                console.error("Analysis failed:", JSON.stringify(data))
+                alert("Analysis failed: " + (data.detail || data.error || "Unknown error"))
             }
 
         } catch (e) {
@@ -338,11 +386,11 @@ export default function AnalysisPage() {
                     </Sheet>
 
                     <HistoryDrawer docId={id} onSelect={(h: any) => {
-                        if (h.prompt === "Base Analysis") {
+                        if (h.prompt === "Base Analysis" || h.prompt === "Base Analysis (Refresh)") {
                             try {
                                 const baseData = JSON.parse(h.response);
                                 setAnalysisData(baseData);
-                                setCustomPrompt(""); // Clear custom since we reverted to base
+                                setCustomPrompt("");
                             } catch (e) {
                                 console.error("Failed to parse base history", e);
                             }
@@ -354,11 +402,41 @@ export default function AnalysisPage() {
                             setCustomPrompt(h.prompt);
                             setAnalysisData((prev: any) => ({
                                 ...prev,
-                                custom_analysis: h.response
+                                custom_analysis: h.response,
+                                custom_prompt: h.prompt
                             }));
                         }
                     }} />
 
+                    {/* Split Button Implementation */}
+                    <div className="flex items-center rounded-md border border-input bg-background shadow-xs">
+                        <Button
+                            onClick={() => handleAnalyze(false)}
+                            disabled={isAnalyzing}
+                            className="rounded-none rounded-l-md border-r border-input bg-black hover:bg-gray-800 text-white gap-2 px-3 focus-visible:z-10"
+                        >
+                            <Sparkles className="h-4 w-4" />
+                            {isAnalyzing ? 'Analyzing...' : 'AI Analyze'}
+                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    className="rounded-none rounded-r-md px-2 bg-black hover:bg-gray-800 text-white border-l-0 focus-visible:z-10"
+                                    disabled={isAnalyzing}
+                                >
+                                    <ChevronDown className="h-4 w-4" />
+                                    <span className="sr-only">More options</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleAnalyze(true)} disabled={!analysisData || isAnalyzing}>
+                                    <RefreshCcw className="mr-2 h-4 w-4" />
+                                    <span>Re-run Analysis</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
 
                     <Button
                         variant="outline"
@@ -369,6 +447,13 @@ export default function AnalysisPage() {
                         <Save className="h-4 w-4" />
                         Save
                     </Button>
+
+                    {/* Toast Notification */}
+                    {showToast && (
+                        <div className="absolute top-12 right-20 bg-black text-white text-xs px-3 py-2 rounded shadow-lg z-50 animate-in fade-in slide-in-from-top-2">
+                            Analysis exists. Use dropdown to re-run.
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -412,7 +497,7 @@ export default function AnalysisPage() {
                                     }}
                                 />
                                 <Button
-                                    onClick={handleAnalyze}
+                                    onClick={() => handleAnalyze(false)}
                                     disabled={isAnalyzing}
                                     className="h-[80px] w-[80px] flex-shrink-0 flex flex-col gap-1"
                                     variant={hasKey ? "default" : "secondary"}
@@ -444,6 +529,96 @@ export default function AnalysisPage() {
                                         <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Summary</h3>
                                         <p className="text-sm leading-relaxed">{analysisData.summary || "No summary available."}</p>
                                     </div>
+
+                                    {/* Category Section */}
+                                    {(analysisData.category || analysisData.sub_category) && (
+                                        <>
+                                            <Separator />
+                                            <div className="space-y-2">
+                                                <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Categorization</h3>
+                                                <div className="flex gap-2">
+                                                    {analysisData.category && (
+                                                        <Badge className="bg-blue-600 hover:bg-blue-700">
+                                                            {analysisData.category}
+                                                        </Badge>
+                                                    )}
+                                                    {analysisData.sub_category && (
+                                                        <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50">
+                                                            {analysisData.sub_category}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Meeting Details Section */}
+                                    {analysisData.meeting_details && analysisData.meeting_details.length > 0 && (
+                                        <>
+                                            <Separator />
+                                            <div className="space-y-4">
+                                                <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Meeting Information</h3>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {analysisData.meeting_details.map((meeting: any, i: number) => (
+                                                        <div key={i} className="p-3 border rounded-md bg-card space-y-2">
+                                                            <div className="font-medium text-sm">{meeting.description || "Meeting"}</div>
+                                                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                                                {meeting.frequency && <Badge variant="outline">Freq: {meeting.frequency}</Badge>}
+                                                                {meeting.location && <Badge variant="outline">Loc: {meeting.location}</Badge>}
+                                                                {meeting.time && <Badge variant="outline">Time: {meeting.time}</Badge>}
+                                                            </div>
+                                                            {meeting.excerpt && (
+                                                                <p className="text-xs text-muted-foreground italic bg-muted/20 p-2 rounded">
+                                                                    "{meeting.excerpt}"
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Board Members Section */}
+                                    {analysisData.board_members && analysisData.board_members.length > 0 && (
+                                        <>
+                                            <Separator />
+                                            <div className="space-y-4">
+                                                <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Board / Committee Members</h3>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {analysisData.board_members.map((member: any, i: number) => (
+                                                        <div key={i} className="p-3 border rounded-md bg-card space-y-2">
+                                                            <div className="flex justify-between items-start">
+                                                                <div className="font-medium text-sm">{member.role_name}</div>
+                                                                {member.appointing_authority && <Badge className="text-[10px]">Appointed by {member.appointing_authority}</Badge>}
+                                                            </div>
+
+                                                            <div className="space-y-1 text-xs">
+                                                                {member.removal_criteria && (
+                                                                    <div className="flex gap-1">
+                                                                        <span className="font-semibold">Removal:</span>
+                                                                        <span className="text-muted-foreground">{member.removal_criteria}</span>
+                                                                    </div>
+                                                                )}
+                                                                {member.composition_criteria && (
+                                                                    <div className="flex gap-1">
+                                                                        <span className="font-semibold">Criteria:</span>
+                                                                        <span className="text-muted-foreground">{member.composition_criteria}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {member.excerpt && (
+                                                                <p className="text-xs text-muted-foreground italic bg-muted/20 p-2 rounded line-clamp-3" title={member.excerpt}>
+                                                                    "{member.excerpt}"
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
 
                                     {analysisData.custom_analysis && (
                                         <>

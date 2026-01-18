@@ -46,6 +46,8 @@ class AnalyzeRequest(BaseModel):
     doc_id: str
     api_key: str
     custom_prompt: Optional[str] = None
+    force_refresh: bool = False
+    fetch_only: bool = False
 
 class AnalyticsSummary(BaseModel):
     total_requests: int
@@ -71,7 +73,19 @@ async def analyze(request: AnalyzeRequest):
             head_path = PROJECT_ROOT / 'acts/research/archive/docs_en.tsv'
         
         # Analyze
-        result_dict = analyze_act_by_id(request.doc_id, request.api_key, head_path, PROJECT_ROOT, request.custom_prompt)
+        result_dict = analyze_act_by_id(
+            request.doc_id, 
+            request.api_key, 
+            head_path, 
+            PROJECT_ROOT, 
+            request.custom_prompt, 
+            request.force_refresh,
+            request.fetch_only
+        )
+        
+        if result_dict is None:
+             # fetch_only was True and no cache found
+             return {"status": "not_found", "detail": "Analysis not found in cache"}
         
         # Parse result text
         text_content = result_dict.get("text", "")
