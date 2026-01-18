@@ -2,6 +2,13 @@
 
 Research and development at Lanka Data Foundation. 
 
+## Quickstart
+
+Use the following Make commands to manage the development environment:
+
+- **Start System**: `make cluster-up` (Starts Backend & Frontend)
+- **Stop System**: `make cluster-down` (Stops cluster & auto-dumps data)
+- **Reset System**: `make clean` (Stops cluster & deletes database)
 ## Acts
 
 This repository includes the `lk_legal_docs` submodule, which provides a curated collection of Sri Lankan legal documents, such as the Tourism Act No. 38 of 2005, enabling research and analysis of legislative texts.
