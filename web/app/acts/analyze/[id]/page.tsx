@@ -21,9 +21,17 @@ const PdfViewer = ({ url, refreshTrigger }: { url: string, refreshTrigger: numbe
         const checkFile = async () => {
             try {
                 const res = await fetch(url, { method: 'HEAD' })
-                setExists(res.ok)
-            } catch {
-                setExists(false)
+                if (res.ok) {
+                    setExists(true)
+                } else {
+                    // unexpected status code
+                    setExists(false)
+                }
+            } catch (e) {
+                // If fetch fails (e.g. CORS error), we assume it might exist and let the iframe try to load it.
+                // We only block if we definitely get a 404/error response from the server above.
+                console.warn("PDF check failed (likely CORS), attempting to load anyway:", e)
+                setExists(true)
             }
         }
         checkFile()
@@ -146,6 +154,7 @@ export default function AnalysisPage() {
     const [analysisData, setAnalysisData] = React.useState<any>(null)
     const [pdfRefresh, setPdfRefresh] = React.useState(0)
     const [customPrompt, setCustomPrompt] = React.useState("")
+    const [actUrl, setActUrl] = React.useState<string | null>(null)
 
     // Load key from session storage on mount
     React.useEffect(() => {
@@ -196,6 +205,30 @@ export default function AnalysisPage() {
         }
         fetchHistoryItem()
     }, [historyId, id, router])
+
+    // Fetch Act Details to get PDF URL
+    React.useEffect(() => {
+        const fetchActDetails = async () => {
+            try {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+                const res = await fetch(`${apiUrl}/acts/${id}`)
+                if (res.ok) {
+                    const act = await res.json()
+                    // Ensure we use the URL from metadata, not local assumption
+                    if (act.url_pdf) {
+                        setActUrl(act.url_pdf)
+                    } else {
+                        console.warn("No PDF URL found in metadata for act", id)
+                    }
+                } else {
+                    console.error("Failed to fetch act details", res.status)
+                }
+            } catch (e) {
+                console.error("Failed to fetch act details", e)
+            }
+        }
+        if (id) fetchActDetails()
+    }, [id])
 
     // Save key to session storage when changed
     const handleKeyChange = (val: string) => {
@@ -343,7 +376,13 @@ export default function AnalysisPage() {
             <main className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2">
                 {/* Left: PDF Viewer */}
                 <div className="p-4 border-r bg-muted/10 h-full overflow-hidden">
-                    <PdfViewer url={`/pdfs/${id}.pdf`} refreshTrigger={pdfRefresh} />
+                    {actUrl ? (
+                        <PdfViewer url={actUrl} refreshTrigger={pdfRefresh} />
+                    ) : (
+                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+                            Fetching document path...
+                        </div>
+                    )}
                 </div>
 
                 {/* Right: Annotations / Assistant */}

@@ -135,6 +135,14 @@ def get_acts():
         acts = session.exec(select(ActMetadata)).all()
         return acts
 
+@app.get("/acts/{doc_id}")
+def get_act_by_id(doc_id: str):
+    with Session(engine) as session:
+        act = session.get(ActMetadata, doc_id)
+        if not act:
+            raise HTTPException(status_code=404, detail="Act not found")
+        return act
+
 @app.get("/analytics")
 def get_analytics():
     with Session(engine) as session:
