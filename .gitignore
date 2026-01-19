@@ -51,6 +51,7 @@ Thumbs.db
 *.sqlite3
 data/
 !data/.gitkeep
+!docs/src/data/
 research.db
 
 # Logs

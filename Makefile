@@ -10,6 +10,11 @@ help:
 	@echo "  make clean         - Stop cluster and DELETE database (research.db)"
 	@echo "  make test          - Run unit tests"
 	@echo "  make integration-test - Run integration tests"
+	@echo "  make update-docs   - Generate acts.json and all_acts.json for docs"
+
+update-docs:
+	@echo "Updating acts data for docs..."
+	python3 scripts/update_docs_data.py
 
 dump:
 	@echo "Dumping analysis data..."
