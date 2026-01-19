@@ -1,0 +1,21 @@
+{
+  "head": "v2",
+  "versions": {
+    "v1": {
+      "id": "v1",
+      "file": "v1_docs.tsv",
+      "parent": null,
+      "patch": null,
+      "timestamp": "2026-01-17T09:31:57.008619",
+      "description": "Initial import from docs_en_with_domain.tsv"
+    },
+    "v2": {
+      "id": "v2",
+      "file": "v2_docs.tsv",
+      "parent": "v1",
+      "patch": "lineage_patch_Universities_Act_No._16_of_1978.json",
+      "timestamp": "2026-01-17T09:33:49.913387",
+      "description": "Applied patch lineage_patch_Universities_Act_No._16_of_1978.json to v1"
+    }
+  }
+}

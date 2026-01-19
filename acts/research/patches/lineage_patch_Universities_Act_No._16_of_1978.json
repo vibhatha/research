@@ -1,0 +1,17 @@
+{
+  "parent_id": "universities-act-16-1978",
+  "parent_title": "Universities Act No. 16 of 1978",
+  "changes": [
+    {
+      "child_id": "2009-10-07-2009-10-07-57-2009-en",
+      "relationship": "amended_by",
+      "notes": "First amendment"
+    },
+    {
+      "child_id": "2016-10-05-2016-10-05-17-2016-en",
+      "relationship": "amended_by",
+      "notes": "This is the second amendment"
+    }
+  ],
+  "timestamp": "2026-01-17T09:01:41+05:30"
+}
