@@ -288,7 +288,7 @@ export default function LineageEditorPage() {
                 <div className="lg:col-span-2">
                     {previewFamily ? (
                         <LineageGraph family={previewFamily}>
-                            <Badge>Preview Mode</Badge>
+                            <Badge key="preview-badge">Preview Mode</Badge>
                         </LineageGraph>
                     ) : (
                         <div className="h-[400px] flex items-center justify-center border-2 border-dashed rounded-lg text-muted-foreground">
