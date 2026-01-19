@@ -1,4 +1,0 @@
-[submodule "submodule/lk_legal_docs"]
-	path = submodule/lk_legal_docs
-	url = https://github.com/nuuuwan/lk_legal_docs
-	branch = data_lk_acts
