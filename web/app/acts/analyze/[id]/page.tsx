@@ -18,6 +18,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import ReactMarkdown from "react-markdown"
 
 // Basic PDF Viewer using iframe
 const PdfViewer = ({ url, refreshTrigger }: { url: string, refreshTrigger: number }) => {
@@ -158,10 +159,20 @@ export default function AnalysisPage() {
     const [isSettingsOpen, setIsSettingsOpen] = React.useState(false)
     const [isAnalyzing, setIsAnalyzing] = React.useState(false)
     const [analysisData, setAnalysisData] = React.useState<any>(null)
+    const [chatHistory, setChatHistory] = React.useState<any[]>([]) // Chat history state
     const [pdfRefresh, setPdfRefresh] = React.useState(0)
     const [customPrompt, setCustomPrompt] = React.useState("")
     const [actUrl, setActUrl] = React.useState<string | null>(null)
     const [showToast, setShowToast] = React.useState(false)
+    const messagesEndRef = React.useRef<HTMLDivElement>(null)
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+
+    React.useEffect(() => {
+        scrollToBottom()
+    }, [chatHistory, isAnalyzing])
 
     // Load key from session storage on mount
     React.useEffect(() => {
@@ -176,49 +187,42 @@ export default function AnalysisPage() {
         }
     }, [id, apiKey])
 
-    // Restore from history if ID is present
+    // Load Full History on Mount
     React.useEffect(() => {
-        if (!historyId) return
-
-        const fetchHistoryItem = async () => {
+        const fetchMeta = async () => {
             try {
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-                const res = await fetch(`${apiUrl}/history/${historyId}`)
+                const res = await fetch(`${apiUrl}/acts/${id}/history`)
                 if (res.ok) {
-                    const h = await res.json()
+                    const hist = await res.json()
+                    // Sort by timestamp asc for chat view
+                    const sorted = hist.sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
-                    if (h.prompt === "Base Analysis") {
+                    // Separate Base vs Chat
+                    // We want the LATEST Base Analysis context
+                    // Relax check to catch "Base Analysis", "Base Analysis (Refresh)", etc.
+                    const baseItems = sorted.filter((h: any) => h.prompt && h.prompt.startsWith("Base Analysis"))
+                    const latestBase = baseItems.length > 0 ? baseItems[baseItems.length - 1] : null
+
+                    // Chat items are everything else
+                    const chatItems = sorted.filter((h: any) => !h.prompt || !h.prompt.startsWith("Base Analysis"))
+
+                    if (latestBase) {
                         try {
-                            const baseData = JSON.parse(h.response)
+                            const baseData = JSON.parse(latestBase.response)
                             setAnalysisData(baseData)
-                            setCustomPrompt("")
                         } catch (e) {
-                            console.error("Failed to parse base history", e)
+                            console.error("Error parsing base history", e)
                         }
-                    } else {
-                        // Better strategy: If we have no analysisData, verify if we can fetch base. 
-                        // But for simplicity in this iteration:
-                        setCustomPrompt(h.prompt)
-                        setAnalysisData((prev: any) => {
-                            if (!prev) {
-                                // Fallback: try to just show custom analysis roughly
-                                return { summary: "Loaded from history (Base context missing)", custom_analysis: h.response }
-                            }
-                            return {
-                                ...prev,
-                                custom_analysis: h.response
-                            }
-                        })
                     }
-                    // Clean URL
-                    router.replace(`/acts/analyze/${id}`)
+                    setChatHistory(chatItems)
                 }
             } catch (e) {
-                console.error("Failed to load history item", e)
+                console.error("Failed to load history", e)
             }
         }
-        fetchHistoryItem()
-    }, [historyId, id, router])
+        if (id) fetchMeta()
+    }, [id])
 
     // Fetch Act Details to get PDF URL
     React.useEffect(() => {
@@ -301,14 +305,35 @@ export default function AnalysisPage() {
             const data = await res.json()
             if (res.ok) {
                 if (data.status === "not_found") {
-                    // Fetch Only failed to find data. Do nothing.
-                    // This creates the "Avoid auto-run" behavior.
                     console.log("No existing analysis found. Waiting for user action.")
                 } else {
-                    // Refresh PDF view as it might have been downloaded
                     setPdfRefresh(prev => prev + 1)
-                    // Set the raw rich data
-                    setAnalysisData(data)
+
+                    if (customPrompt) {
+                        // Update Current View (Snapshot Model)
+                        setAnalysisData((prev: any) => ({
+                            ...prev,
+                            custom_analysis: data.custom_analysis,
+                            custom_prompt: customPrompt
+                        }))
+
+                        // Append to History List (for Drawer)
+                        const newMsg = {
+                            id: Date.now(),
+                            prompt: customPrompt,
+                            response: data.custom_analysis,
+                            timestamp: new Date().toISOString(),
+                            model: data.model
+                        }
+                        setChatHistory(prev => [...prev, newMsg])
+                        setChatHistory(prev => [...prev, newMsg])
+                        // setLoadingChatId(null) // Removed to fix lint
+                    } else {
+                        // Base Analysis Update
+                        setAnalysisData(data)
+                        // Also append to history if it was a refresh? 
+                        // The backend saves it to history, so a refresh would pick it up.
+                    }
                 }
             } else {
                 console.error("Analysis failed:", JSON.stringify(data))
@@ -327,7 +352,17 @@ export default function AnalysisPage() {
         if (!analysisData) return
 
         const fileName = `${id}-analysis-${new Date().toISOString().split('T')[0]}.json`
-        const jsonStr = JSON.stringify(analysisData, null, 2)
+
+        // Merge chatHistory into the saved file
+        const exportData = {
+            ...analysisData,
+            history: chatHistory, // The structured chat history
+            // We could also export the raw full history if we had it, but chatHistory + custom_analysis (which is base) covers it.
+            // Actually, let's explicitly note this is a v2 export
+            version: "2.0"
+        }
+
+        const jsonStr = JSON.stringify(exportData, null, 2)
         const blob = new Blob([jsonStr], { type: "application/json" })
         const href = URL.createObjectURL(blob)
 
@@ -386,7 +421,7 @@ export default function AnalysisPage() {
                     </Sheet>
 
                     <HistoryDrawer docId={id} onSelect={(h: any) => {
-                        if (h.prompt === "Base Analysis" || h.prompt === "Base Analysis (Refresh)") {
+                        if (h.prompt && h.prompt.startsWith("Base Analysis")) {
                             try {
                                 const baseData = JSON.parse(h.response);
                                 setAnalysisData(baseData);
@@ -395,16 +430,25 @@ export default function AnalysisPage() {
                                 console.error("Failed to parse base history", e);
                             }
                         } else {
+                            // Allow viewing specific chat item logic if needed,
+                            // or perhaps we just want to load that context?
+                            // For now, let's keep it simple: if they click a chat item, 
+                            // we could maybe highlight it? Or do nothing?
+                            // Reverting to old behavior: set it as "Custom Analysis" view
+                            // which might be confusing with new UI, but let's enable it for "checking full history"
                             if (!analysisData) {
                                 alert("Please run or load a base analysis first to view context.");
                                 return;
                             }
                             setCustomPrompt(h.prompt);
+                            // Load the selected item into the main view
                             setAnalysisData((prev: any) => ({
                                 ...prev,
                                 custom_analysis: h.response,
                                 custom_prompt: h.prompt
                             }));
+                            // Scroll to top or custom section?
+                            // Maybe just ensure the custom section is visible
                         }
                     }} />
 
@@ -620,15 +664,31 @@ export default function AnalysisPage() {
                                         </>
                                     )}
 
+                                    {/* Custom Analysis Result Block (Restored) */}
                                     {analysisData.custom_analysis && (
                                         <>
                                             <Separator />
-                                            <div className="space-y-2 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
-                                                <h3 className="font-semibold text-sm uppercase text-blue-600 dark:text-blue-400 tracking-wider flex items-center gap-2">
-                                                    <Sparkles className="h-3 w-3" />
-                                                    Custom Analysis
+                                            <div className="space-y-4">
+                                                <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider flex items-center gap-2">
+                                                    <Sparkles className="h-4 w-4 text-purple-600" />
+                                                    Custom Analysis Result
                                                 </h3>
-                                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{analysisData.custom_analysis}</p>
+
+                                                {/* Prompt Display - Moved out of header for visibility */}
+                                                {analysisData.custom_prompt && (
+                                                    <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-md text-sm text-foreground/90 border-l-4 border-purple-400 mb-4">
+                                                        <span className="font-semibold text-xs block mb-2 uppercase tracking-wide text-muted-foreground">Instruction</span>
+                                                        {analysisData.custom_prompt}
+                                                    </div>
+                                                )}
+
+                                                <div className="bg-slate-50 dark:bg-slate-900 border rounded-lg p-6 shadow-xs">
+                                                    <div className="prose max-w-none dark:prose-invert text-sm">
+                                                        <ReactMarkdown>
+                                                            {analysisData.custom_analysis}
+                                                        </ReactMarkdown>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </>
                                     )}

@@ -56,15 +56,24 @@ def version_group():
 @click.argument("target", required=True) 
 @click.option("--api-key", required=True, help="Google API Key")
 @click.option("--by-id", is_flag=True, help="Treat target as doc_id instead of path")
-def cmd_analyze(target, api_key, by_id):
+@click.option("--fetch-only", is_flag=True, help="Fetch document only, do not analyze")
+@click.option("--force-refresh", is_flag=True, help="Force refresh of analysis")
+def cmd_analyze(target, api_key, by_id, fetch_only, force_refresh):
     """Analyze a local PDF or Act by ID using Gemini."""
     import json
-    from ldf.research.analyze import analyze_act_by_id
+    from ldf.research.analyze import analyze_act_by_id, analyze_base
     
     try:
         if by_id:
             data_path = get_head_path()
-            result_json = analyze_act_by_id(target, api_key, data_path, PROJECT_ROOT)
+            result_json = analyze_act_by_id(
+                target, 
+                api_key, 
+                data_path, 
+                PROJECT_ROOT, 
+                force_refresh=force_refresh, 
+                fetch_only=fetch_only
+            )
         else:
             result_json = analyze_base(Path(target), api_key)
         

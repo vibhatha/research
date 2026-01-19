@@ -105,6 +105,32 @@ To generate the flat list of acts (`acts.json`) for the table:
 ldf research process
 ```
 
+### D. Adding a New Act
+To add a missing legislative act to the system:
+
+1.  **Edit the Archive TSV**:
+    Open `acts/research/archive/docs_en.tsv` and append a new line with the following tab-separated columns:
+    ```tsv
+    doc_type	doc_id	num	date_str	description	url_metadata	lang	url_pdf	doc_number
+    ```
+    *Example*:
+    ```tsv
+    lk_acts	public-examinations-act-25-1968	25-1968-en	1968-XX-XX	Public Examinations Act No. 25 of 1968	manual_entry	en	https://lawnet.gov.lk/...	25/1968
+    ```
+
+2.  **Run the Pipeline**:
+    execute the following commands to propagate the change:
+    ```bash
+    # 1. Assign domain and generate docs_en_with_domain.tsv
+    ldf research categorize
+
+    # 2. Update the frontend JSON (acts.json)
+    ldf research process
+
+    # 3. Update the API database
+    ldf research migrate
+    ```
+
 ## 5. Data Versioning & Patching
 
 We use a version control system for the data itself to ensure integrity and history.

@@ -155,6 +155,12 @@ def get_act_by_id(doc_id: str):
         act = session.get(ActMetadata, doc_id)
         if not act:
             raise HTTPException(status_code=404, detail="Act not found")
+        
+        # Check for local HTML override to avoid CORS
+        local_html = PROJECT_ROOT / f"web/public/pdfs/{doc_id}.html"
+        if local_html.exists():
+             act.url_pdf = f"/pdfs/{doc_id}.html"
+             
         return act
 
 @app.get("/analytics")
