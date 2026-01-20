@@ -39,6 +39,7 @@ export function AddActForm() {
     const [isLoading, setIsLoading] = useState(false)
     const [hasChecked, setHasChecked] = useState(false)
     const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+    const [overrideDuplicates, setOverrideDuplicates] = useState(false)
 
     // Details View State
     const [selectedAct, setSelectedAct] = useState<ActMetadata | null>(null)
@@ -52,12 +53,14 @@ export function AddActForm() {
         setter(val)
         setHasChecked(false)
         setMsg(null)
+        setOverrideDuplicates(false)
     }
 
     const checkDuplicates = async () => {
         if (!title) return
         setIsLoading(true)
         setMsg(null)
+        setOverrideDuplicates(false)
         try {
             const res = await fetch("http://localhost:8000/acts/check-duplicate", {
                 method: "POST",
@@ -81,7 +84,7 @@ export function AddActForm() {
         }
     }
 
-    const handleViewDetails = async (doc_id: string) => {
+    const handleViewDetails = async (doc_id: string, defaultTitle?: string) => {
         setLoadingDetails(true)
         setDetailsOpen(true) // Open immediately to start animation, spinner will show in panel
         try {
@@ -89,6 +92,12 @@ export function AddActForm() {
             const resMeta = await fetch(`http://localhost:8000/acts/${doc_id}`)
             if (!resMeta.ok) throw new Error("Failed to load details")
             const meta = await resMeta.json()
+
+            // If metadata title is missing/null, fallback to the one from the duplicate list
+            if (!meta.title && defaultTitle) {
+                meta.title = defaultTitle
+            }
+
             setSelectedAct(meta)
 
             // Fetch History (Analysis) - optional
@@ -162,7 +171,13 @@ export function AddActForm() {
 
     // Check button enabled if title is present
     const isCheckDisabled = !title || isLoading
-    const isAddDisabled = !title || !url || !year || !hasChecked || isLoading
+
+    // Add button enabled only if:
+    // 1. All fields filled
+    // 2. Checked for duplicates
+    // 3. Not loading
+    // 4. EITHER no duplicates found OR user explicitly overwrote duplicate warning
+    const isAddDisabled = !title || !url || !year || !hasChecked || isLoading || (duplicates.length > 0 && !overrideDuplicates)
 
     // Layout Classes
     const containerClasses = "flex gap-4 w-full transition-all duration-500 ease-in-out"
@@ -256,6 +271,22 @@ export function AddActForm() {
                             </Alert>
                         )}
 
+                        {/* Duplicate Override Checkbox */}
+                        {duplicates.length > 0 && (
+                            <div className="flex items-center space-x-2 rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-900 dark:bg-yellow-900/20">
+                                <input
+                                    type="checkbox"
+                                    id="override"
+                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                    checked={overrideDuplicates}
+                                    onChange={(e) => setOverrideDuplicates(e.target.checked)}
+                                />
+                                <Label htmlFor="override" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-yellow-800 dark:text-yellow-200 cursor-pointer">
+                                    I confirm this is not a duplicate
+                                </Label>
+                            </div>
+                        )}
+
                         <Button type="submit" className="w-full" disabled={isAddDisabled}>
                             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                             Add Act
@@ -281,7 +312,7 @@ export function AddActForm() {
                             {duplicates.map((d) => (
                                 <li key={d.doc_id} className={`flex flex-col gap-1 p-3 rounded-lg border transition-colors cursor-pointer ${selectedAct?.doc_id === d.doc_id ? 'bg-primary/5 border-primary ring-1 ring-primary' : 'bg-background hover:bg-muted/50'
                                     }`}
-                                    onClick={() => handleViewDetails(d.doc_id)}
+                                    onClick={() => handleViewDetails(d.doc_id, d.title)}
                                 >
                                     <div className="flex justify-between items-start">
                                         <span className="font-medium text-sm line-clamp-2">{d.title}</span>
@@ -298,7 +329,7 @@ export function AddActForm() {
                                             className="h-6 text-xs hover:bg-transparent p-0 text-blue-500"
                                             onClick={(e) => {
                                                 e.stopPropagation()
-                                                handleViewDetails(d.doc_id)
+                                                handleViewDetails(d.doc_id, d.title)
                                             }}
                                         >
                                             View Details <ExternalLink className="ml-1 h-3 w-3" />
