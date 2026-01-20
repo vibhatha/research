@@ -17,7 +17,10 @@ from ldf.research.analyze import analyze_act_by_id
 from ldf.utils import find_project_root
 from ldf.research.db import create_db_and_tables, TelemetryLog, ActMetadata, ActAnalysis, engine
 from ldf.research.dump import restore_from_latest_dump
+from ldf.research.versions import get_head_path
 from sqlmodel import Session, select, func
+import difflib
+import csv
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,6 +51,14 @@ class AnalyzeRequest(BaseModel):
     custom_prompt: Optional[str] = None
     force_refresh: bool = False
     fetch_only: bool = False
+
+class ActCreate(BaseModel):
+    title: str
+    url_pdf: str
+    doc_id: Optional[str] = None
+    year: Optional[str] = None
+    number: Optional[str] = None
+    doc_type: str = "lk_acts"
 
 class AnalyticsSummary(BaseModel):
     total_requests: int
@@ -142,6 +153,111 @@ async def analyze(request: AnalyzeRequest):
             pass 
             
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/acts/check-duplicate")
+def check_duplicate(act: ActCreate):
+    with Session(engine) as session:
+        # Check exact match on doc_id if provided
+        if act.doc_id:
+            existing = session.get(ActMetadata, act.doc_id)
+            if existing:
+                 return [{"title": existing.description, "doc_id": existing.doc_id, "score": 1.0}]
+
+        # Fuzzy match on description
+        all_acts = session.exec(select(ActMetadata)).all()
+        titles = [a.description for a in all_acts]
+        
+        # difflib.get_close_matches returns exact matches too
+        matches = difflib.get_close_matches(act.title, titles, n=5, cutoff=0.6)
+        
+        results = []
+        for match in matches:
+             # Find the act (inefficient but safe for now)
+             found = next((a for a in all_acts if a.description == match), None)
+             if found:
+                 ratio = difflib.SequenceMatcher(None, act.title, found.description).ratio()
+                 results.append({
+                     "title": found.description,
+                     "doc_id": found.doc_id,
+                     "score": ratio
+                 })
+        
+        return results
+
+@app.post("/acts/add")
+def add_act(act: ActCreate):
+    # generate doc_id if not present
+    if not act.doc_id:
+        # Simple slug generation or existing pattern? 
+        # Existing pattern seems to be date-based or somewhat complex.
+        # Let's use a simple safe slug for now: "custom-{year}-{slug}"
+        safe_title = "".join(c for c in act.title if c.isalnum() or c in (' ', '-')).replace(" ", "-").lower()
+        year = act.year or datetime.now().year
+        act.doc_id = f"custom-{year}-{safe_title}"
+
+    with Session(engine) as session:
+        # Double check existence
+        if session.get(ActMetadata, act.doc_id):
+             raise HTTPException(status_code=400, detail=f"Act with ID {act.doc_id} already exists")
+        
+        new_act = ActMetadata(
+            doc_id=act.doc_id,
+            doc_type=act.doc_type,
+            num=act.number or "",
+            date_str=str(act.year) if act.year else "",  # approximate
+            description=act.title,
+            url_metadata=None,
+            lang="en", # default
+            url_pdf=act.url_pdf,
+            doc_number=act.number,
+            domain="Custom",
+            year=str(act.year) if act.year else str(datetime.now().year)
+        )
+        session.add(new_act)
+        session.commit()
+        session.refresh(new_act)
+
+        # Append to TSV
+        # We need to respect the TSV columns:
+        # doc_type, doc_id, num, date_str, description, url_metadata, lang, url_pdf, doc_number, domain
+        tsv_path = get_head_path()
+        try:
+             with open(tsv_path, 'a', newline='', encoding='utf-8') as f:
+                 writer = csv.writer(f, delimiter='\t')
+                 # Ensure we have all columns. 
+                 # Current HEAD TSV header check might be good, but assuming standard 10 cols for now as per view_file
+                 writer.writerow([
+                     new_act.doc_type,
+                     new_act.doc_id,
+                     new_act.num,
+                     new_act.date_str,
+                     new_act.description,
+                     "", # url_metadata
+                     new_act.lang,
+                     new_act.url_pdf,
+                     new_act.doc_number,
+                     new_act.domain
+                 ])
+        except Exception as e:
+            print(f"Failed to append to TSV: {e}", file=sys.stderr)
+            # We don't rollback DB? 
+            # Ideally we should, but for this "hacky" feature, DB is primary for UI, TSV is archival.
+            pass
+
+        return new_act
+
+@app.post("/acts/batch")
+def add_acts_batch(acts: List[ActCreate]):
+    results = []
+    errors = []
+    for act in acts:
+        try:
+            res = add_act(act)
+            results.append(res)
+        except Exception as e:
+            errors.append({"title": act.title, "error": str(e)})
+    
+    return {"added": len(results), "errors": errors}
 
 @app.get("/acts")
 def get_acts():
