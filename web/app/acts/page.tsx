@@ -4,7 +4,8 @@ import { Act } from "@/lib/types"
 import actsData from "../../public/data/acts.json"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Activity } from "lucide-react"
+import { Activity, Layers } from "lucide-react"
+import { ActsHeader } from "@/components/acts/ActsHeader"
 
 // In Docker, we talk to backend service directly
 async function getActs() {
@@ -30,17 +31,7 @@ export default async function ActsPage() {
     return (
         <div className="hidden flex-col md:flex">
             <div className="border-b">
-                <div className="flex h-16 items-center px-4">
-                    <h2 className="text-lg font-semibold">Sri Lankan Legislative Acts</h2>
-                    <div className="ml-auto flex items-center space-x-4">
-                        <Link href="/analytics">
-                            <Button variant="outline" size="sm">
-                                <Activity className="mr-2 h-4 w-4" />
-                                System Observability
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
+                <ActsHeader />
             </div>
             <div className="flex-1 space-y-4 p-8 pt-6">
                 <div className="flex items-center justify-between space-y-2">

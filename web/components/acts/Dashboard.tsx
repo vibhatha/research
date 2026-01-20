@@ -7,7 +7,7 @@ import { Act } from "@/lib/types"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Treemap, Cell } from "recharts"
 import { LineageView } from "@/components/acts/LineageView"
 import Link from "next/link"
-import { Settings2 } from "lucide-react"
+import { Settings2, Layers, Sparkles } from "lucide-react"
 
 const COLORS = [
     "#8884d8", "#83a6ed", "#8dd1e1", "#82ca9d", "#a4de6c", "#d0ed57",
