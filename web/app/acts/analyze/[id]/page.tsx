@@ -18,6 +18,10 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import ReactMarkdown from "react-markdown"
+import { AnalysisResultView } from "@/components/acts/AnalysisResultView"
+import { useApiKey } from "@/hooks/useApiKey"
+import { SettingsSheet } from "@/components/acts/SettingsSheet"
 
 // Basic PDF Viewer using iframe
 const PdfViewer = ({ url, refreshTrigger }: { url: string, refreshTrigger: number }) => {
@@ -154,20 +158,24 @@ export default function AnalysisPage() {
     const historyId = searchParams.get("history_id")
 
     // State
-    const [apiKey, setApiKey] = React.useState("")
+    const { apiKey } = useApiKey()
     const [isSettingsOpen, setIsSettingsOpen] = React.useState(false)
     const [isAnalyzing, setIsAnalyzing] = React.useState(false)
     const [analysisData, setAnalysisData] = React.useState<any>(null)
+    const [chatHistory, setChatHistory] = React.useState<any[]>([]) // Chat history state
     const [pdfRefresh, setPdfRefresh] = React.useState(0)
     const [customPrompt, setCustomPrompt] = React.useState("")
     const [actUrl, setActUrl] = React.useState<string | null>(null)
     const [showToast, setShowToast] = React.useState(false)
+    const messagesEndRef = React.useRef<HTMLDivElement>(null)
 
-    // Load key from session storage on mount
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
+
     React.useEffect(() => {
-        const storedKey = sessionStorage.getItem("gemini_api_key")
-        if (storedKey) setApiKey(storedKey)
-    }, [])
+        scrollToBottom()
+    }, [chatHistory, isAnalyzing])
 
     // Auto-load analysis logic
     React.useEffect(() => {
@@ -176,49 +184,42 @@ export default function AnalysisPage() {
         }
     }, [id, apiKey])
 
-    // Restore from history if ID is present
+    // Load Full History on Mount
     React.useEffect(() => {
-        if (!historyId) return
-
-        const fetchHistoryItem = async () => {
+        const fetchMeta = async () => {
             try {
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-                const res = await fetch(`${apiUrl}/history/${historyId}`)
+                const res = await fetch(`${apiUrl}/acts/${id}/history`)
                 if (res.ok) {
-                    const h = await res.json()
+                    const hist = await res.json()
+                    // Sort by timestamp asc for chat view
+                    const sorted = hist.sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
-                    if (h.prompt === "Base Analysis") {
+                    // Separate Base vs Chat
+                    // We want the LATEST Base Analysis context
+                    // Relax check to catch "Base Analysis", "Base Analysis (Refresh)", etc.
+                    const baseItems = sorted.filter((h: any) => h.prompt && h.prompt.startsWith("Base Analysis"))
+                    const latestBase = baseItems.length > 0 ? baseItems[baseItems.length - 1] : null
+
+                    // Chat items are everything else
+                    const chatItems = sorted.filter((h: any) => !h.prompt || !h.prompt.startsWith("Base Analysis"))
+
+                    if (latestBase) {
                         try {
-                            const baseData = JSON.parse(h.response)
+                            const baseData = JSON.parse(latestBase.response)
                             setAnalysisData(baseData)
-                            setCustomPrompt("")
                         } catch (e) {
-                            console.error("Failed to parse base history", e)
+                            console.error("Error parsing base history", e)
                         }
-                    } else {
-                        // Better strategy: If we have no analysisData, verify if we can fetch base. 
-                        // But for simplicity in this iteration:
-                        setCustomPrompt(h.prompt)
-                        setAnalysisData((prev: any) => {
-                            if (!prev) {
-                                // Fallback: try to just show custom analysis roughly
-                                return { summary: "Loaded from history (Base context missing)", custom_analysis: h.response }
-                            }
-                            return {
-                                ...prev,
-                                custom_analysis: h.response
-                            }
-                        })
                     }
-                    // Clean URL
-                    router.replace(`/acts/analyze/${id}`)
+                    setChatHistory(chatItems)
                 }
             } catch (e) {
-                console.error("Failed to load history item", e)
+                console.error("Failed to load history", e)
             }
         }
-        fetchHistoryItem()
-    }, [historyId, id, router])
+        if (id) fetchMeta()
+    }, [id])
 
     // Fetch Act Details to get PDF URL
     React.useEffect(() => {
@@ -244,17 +245,13 @@ export default function AnalysisPage() {
         if (id) fetchActDetails()
     }, [id])
 
-    // Save key to session storage when changed
-    const handleKeyChange = (val: string) => {
-        setApiKey(val)
-        sessionStorage.setItem("gemini_api_key", val)
-    }
+
 
     // Derived
     const hasKey = apiKey.length > 0
 
     // Handlers
-    const handleAnalyze = async (force: boolean = false, fetchOnly: boolean = false) => {
+    const handleAnalyze = async (force: boolean = false, fetchOnly: boolean = false, promptOverride?: string) => {
         if (!hasKey) {
             // If auto-called (force=false), we might simply ignore if NO key, but here we check hasKey.
             // If checking specifically for User action, we might need a flag.
@@ -277,7 +274,7 @@ export default function AnalysisPage() {
         }
 
         // Check if analysis exists and we are NOT forcing a refresh and NOT a custom prompt
-        if (analysisData && !force && !customPrompt && !fetchOnly) {
+        if (analysisData && !force && !customPrompt && !promptOverride && !fetchOnly) {
             setShowToast(true)
             setTimeout(() => setShowToast(false), 3000)
             return
@@ -292,7 +289,7 @@ export default function AnalysisPage() {
                 body: JSON.stringify({
                     doc_id: id,
                     api_key: apiKey,
-                    custom_prompt: customPrompt,
+                    custom_prompt: promptOverride || customPrompt,
                     force_refresh: force,
                     fetch_only: fetchOnly
                 })
@@ -301,14 +298,35 @@ export default function AnalysisPage() {
             const data = await res.json()
             if (res.ok) {
                 if (data.status === "not_found") {
-                    // Fetch Only failed to find data. Do nothing.
-                    // This creates the "Avoid auto-run" behavior.
                     console.log("No existing analysis found. Waiting for user action.")
                 } else {
-                    // Refresh PDF view as it might have been downloaded
                     setPdfRefresh(prev => prev + 1)
-                    // Set the raw rich data
-                    setAnalysisData(data)
+
+                    if (customPrompt) {
+                        // Update Current View (Snapshot Model)
+                        setAnalysisData((prev: any) => ({
+                            ...prev,
+                            custom_analysis: data.custom_analysis,
+                            custom_prompt: promptOverride || customPrompt
+                        }))
+
+                        // Append to History List (for Drawer)
+                        const newMsg = {
+                            id: Date.now(),
+                            prompt: promptOverride || customPrompt,
+                            response: data.custom_analysis,
+                            timestamp: new Date().toISOString(),
+                            model: data.model
+                        }
+                        setChatHistory(prev => [...prev, newMsg])
+
+                        // setLoadingChatId(null) // Removed to fix lint
+                    } else {
+                        // Base Analysis Update
+                        setAnalysisData(data)
+                        // Also append to history if it was a refresh? 
+                        // The backend saves it to history, so a refresh would pick it up.
+                    }
                 }
             } else {
                 console.error("Analysis failed:", JSON.stringify(data))
@@ -327,7 +345,17 @@ export default function AnalysisPage() {
         if (!analysisData) return
 
         const fileName = `${id}-analysis-${new Date().toISOString().split('T')[0]}.json`
-        const jsonStr = JSON.stringify(analysisData, null, 2)
+
+        // Merge chatHistory into the saved file
+        const exportData = {
+            ...analysisData,
+            history: chatHistory, // The structured chat history
+            // We could also export the raw full history if we had it, but chatHistory + custom_analysis (which is base) covers it.
+            // Actually, let's explicitly note this is a v2 export
+            version: "2.0"
+        }
+
+        const jsonStr = JSON.stringify(exportData, null, 2)
         const blob = new Blob([jsonStr], { type: "application/json" })
         const href = URL.createObjectURL(blob)
 
@@ -339,6 +367,14 @@ export default function AnalysisPage() {
         document.body.removeChild(link)
         URL.revokeObjectURL(href)
     }
+
+
+    const SUGGESTED_QUESTIONS = [
+        "Which department this act is used to get the work done?",
+        "What are the key penalties defined in this act?",
+        "Who is the appointing authority for the board?",
+        "What are the meeting times of various councils, boards or departments?"
+    ]
 
     return (
         <div className="h-screen flex flex-col">
@@ -355,38 +391,9 @@ export default function AnalysisPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <Sheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
-                        <SheetTrigger asChild>
-                            <Button variant="outline" size="icon">
-                                <Settings className="h-4 w-4" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent>
-                            <SheetHeader>
-                                <SheetTitle>Analysis Settings</SheetTitle>
-                                <SheetDescription>
-                                    Configure AI settings for this session. Keys are cleared on exit.
-                                </SheetDescription>
-                            </SheetHeader>
-                            <div className="py-6 space-y-4">
-                                <div className="space-y-2">
-                                    <Label>Gemini API Key</Label>
-                                    <Input
-                                        type="password"
-                                        placeholder="sk-..."
-                                        value={apiKey}
-                                        onChange={e => handleKeyChange(e.target.value)}
-                                    />
-                                    <p className="text-xs text-muted-foreground">
-                                        Required for &quot;AI Analyze&quot; feature.
-                                    </p>
-                                </div>
-                            </div>
-                        </SheetContent>
-                    </Sheet>
-
+                    <SettingsSheet open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
                     <HistoryDrawer docId={id} onSelect={(h: any) => {
-                        if (h.prompt === "Base Analysis" || h.prompt === "Base Analysis (Refresh)") {
+                        if (h.prompt && h.prompt.startsWith("Base Analysis")) {
                             try {
                                 const baseData = JSON.parse(h.response);
                                 setAnalysisData(baseData);
@@ -395,16 +402,25 @@ export default function AnalysisPage() {
                                 console.error("Failed to parse base history", e);
                             }
                         } else {
+                            // Allow viewing specific chat item logic if needed,
+                            // or perhaps we just want to load that context?
+                            // For now, let's keep it simple: if they click a chat item, 
+                            // we could maybe highlight it? Or do nothing?
+                            // Reverting to old behavior: set it as "Custom Analysis" view
+                            // which might be confusing with new UI, but let's enable it for "checking full history"
                             if (!analysisData) {
                                 alert("Please run or load a base analysis first to view context.");
                                 return;
                             }
                             setCustomPrompt(h.prompt);
+                            // Load the selected item into the main view
                             setAnalysisData((prev: any) => ({
                                 ...prev,
                                 custom_analysis: h.response,
                                 custom_prompt: h.prompt
                             }));
+                            // Scroll to top or custom section?
+                            // Maybe just ensure the custom section is visible
                         }
                     }} />
 
@@ -511,6 +527,29 @@ export default function AnalysisPage() {
                                     <span className="text-xs">{isAnalyzing ? "Running" : "Analyze"}</span>
                                 </Button>
                             </div>
+
+                            {/* Suggested Questions */}
+                            <div className="flex flex-wrap gap-2">
+                                {SUGGESTED_QUESTIONS.map((q, i) => (
+                                    <div
+                                        key={i}
+                                        onClick={() => {
+                                            if (isAnalyzing) return;
+                                            setCustomPrompt(q);
+                                            handleAnalyze(false, false, q);
+                                        }}
+                                        className={`
+                                            px-3 py-2 rounded-md border text-xs font-medium cursor-pointer transition-all duration-200
+                                            ${isAnalyzing
+                                                ? 'opacity-50 cursor-not-allowed bg-muted text-muted-foreground'
+                                                : 'bg-card hover:bg-slate-50 dark:hover:bg-slate-900 border-slate-200 dark:border-slate-800 text-foreground/80 hover:text-foreground hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm'
+                                            }
+                                        `}
+                                    >
+                                        {q}
+                                    </div>
+                                ))}
+                            </div>
                             {!hasKey && (
                                 <p className="text-xs text-destructive">
                                     * API Key missing. Configure in <span className="font-bold cursor-pointer" onClick={() => setIsSettingsOpen(true)}>Settings</span>.
@@ -524,195 +563,7 @@ export default function AnalysisPage() {
                                 </div>
                             ) : (
                                 <>
-                                    {/* Summary Section */}
-                                    <div className="space-y-2">
-                                        <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Summary</h3>
-                                        <p className="text-sm leading-relaxed">{analysisData.summary || "No summary available."}</p>
-                                    </div>
-
-                                    {/* Category Section */}
-                                    {(analysisData.category || analysisData.sub_category) && (
-                                        <>
-                                            <Separator />
-                                            <div className="space-y-2">
-                                                <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Categorization</h3>
-                                                <div className="flex gap-2">
-                                                    {analysisData.category && (
-                                                        <Badge className="bg-blue-600 hover:bg-blue-700">
-                                                            {analysisData.category}
-                                                        </Badge>
-                                                    )}
-                                                    {analysisData.sub_category && (
-                                                        <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50">
-                                                            {analysisData.sub_category}
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Meeting Details Section */}
-                                    {analysisData.meeting_details && analysisData.meeting_details.length > 0 && (
-                                        <>
-                                            <Separator />
-                                            <div className="space-y-4">
-                                                <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Meeting Information</h3>
-                                                <div className="grid grid-cols-1 gap-3">
-                                                    {analysisData.meeting_details.map((meeting: any, i: number) => (
-                                                        <div key={i} className="p-3 border rounded-md bg-card space-y-2">
-                                                            <div className="font-medium text-sm">{meeting.description || "Meeting"}</div>
-                                                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                                                {meeting.frequency && <Badge variant="outline">Freq: {meeting.frequency}</Badge>}
-                                                                {meeting.location && <Badge variant="outline">Loc: {meeting.location}</Badge>}
-                                                                {meeting.time && <Badge variant="outline">Time: {meeting.time}</Badge>}
-                                                            </div>
-                                                            {meeting.excerpt && (
-                                                                <p className="text-xs text-muted-foreground italic bg-muted/20 p-2 rounded">
-                                                                    "{meeting.excerpt}"
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {/* Board Members Section */}
-                                    {analysisData.board_members && analysisData.board_members.length > 0 && (
-                                        <>
-                                            <Separator />
-                                            <div className="space-y-4">
-                                                <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Board / Committee Members</h3>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    {analysisData.board_members.map((member: any, i: number) => (
-                                                        <div key={i} className="p-3 border rounded-md bg-card space-y-2">
-                                                            <div className="flex justify-between items-start">
-                                                                <div className="font-medium text-sm">{member.role_name}</div>
-                                                                {member.appointing_authority && <Badge className="text-[10px]">Appointed by {member.appointing_authority}</Badge>}
-                                                            </div>
-
-                                                            <div className="space-y-1 text-xs">
-                                                                {member.removal_criteria && (
-                                                                    <div className="flex gap-1">
-                                                                        <span className="font-semibold">Removal:</span>
-                                                                        <span className="text-muted-foreground">{member.removal_criteria}</span>
-                                                                    </div>
-                                                                )}
-                                                                {member.composition_criteria && (
-                                                                    <div className="flex gap-1">
-                                                                        <span className="font-semibold">Criteria:</span>
-                                                                        <span className="text-muted-foreground">{member.composition_criteria}</span>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-
-                                                            {member.excerpt && (
-                                                                <p className="text-xs text-muted-foreground italic bg-muted/20 p-2 rounded line-clamp-3" title={member.excerpt}>
-                                                                    "{member.excerpt}"
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {analysisData.custom_analysis && (
-                                        <>
-                                            <Separator />
-                                            <div className="space-y-2 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
-                                                <h3 className="font-semibold text-sm uppercase text-blue-600 dark:text-blue-400 tracking-wider flex items-center gap-2">
-                                                    <Sparkles className="h-3 w-3" />
-                                                    Custom Analysis
-                                                </h3>
-                                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{analysisData.custom_analysis}</p>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    <Separator />
-
-                                    {/* Entities Section */}
-                                    {analysisData.entities && analysisData.entities.length > 0 && (
-                                        <div className="space-y-4">
-                                            <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">Key Entities</h3>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                {analysisData.entities.map((entity: any, i: number) => (
-                                                    <div key={i} className="p-3 border rounded-md bg-card space-y-1">
-                                                        <div className="flex items-start justify-between">
-                                                            <div className="font-medium text-sm">{entity.entity_name}</div>
-                                                            <Badge variant="outline" className="text-[10px] uppercase">{entity.entity_type}</Badge>
-                                                        </div>
-                                                        {entity.excerpt && (
-                                                            <p className="text-xs text-muted-foreground italic line-clamp-2" title={entity.excerpt}>
-                                                                &quot;{entity.excerpt}&quot;
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <Separator />
-
-                                    {/* Referenced Acts */}
-                                    {analysisData.referenced_acts && analysisData.referenced_acts.length > 0 && (
-                                        <div className="space-y-2">
-                                            <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">References</h3>
-                                            <div className="flex flex-wrap gap-2">
-                                                {analysisData.referenced_acts.map((ref: string, i: number) => (
-                                                    <Badge key={i} variant="secondary" className="text-xs">{ref}</Badge>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Amendments / Sections */}
-                                    <div className="space-y-4">
-                                        <h3 className="font-semibold text-sm uppercase text-muted-foreground tracking-wider">
-                                            {analysisData.sections ? "Sections Detected" : "Amendments"}
-                                        </h3>
-
-                                        {/* Render Sections if available */}
-                                        {analysisData.sections && analysisData.sections.map((sec: any, idx: number) => (
-                                            <div key={idx} className="p-4 border rounded-lg bg-card space-y-2">
-                                                <div className="flex items-center justify-between">
-                                                    <Badge variant="outline">Section {sec.section_number}</Badge>
-                                                    {sec.footnotes && sec.footnotes.length > 0 && (
-                                                        <Badge variant="destructive" className="text-[10px]">{sec.footnotes.length} Notes</Badge>
-                                                    )}
-                                                </div>
-                                                <div className="text-sm text-foreground/90 whitespace-pre-wrap">{sec.content}</div>
-
-                                                {sec.footnotes && sec.footnotes.length > 0 && (
-                                                    <div className="mt-3 bg-muted/30 p-2 rounded text-xs text-muted-foreground">
-                                                        <strong>Notes:</strong>
-                                                        <ul className="list-disc list-inside mt-1">
-                                                            {sec.footnotes.map((note: string, ni: number) => (
-                                                                <li key={ni}>{note}</li>
-                                                            ))}
-                                                        </ul>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
-
-                                        {/* Legacy Fallback for Amendments only */}
-                                        {!analysisData.sections && analysisData.amended_sections && (
-                                            <div className="space-y-2">
-                                                {analysisData.amended_sections.map((sec: any, idx: number) => (
-                                                    <div key={idx} className="p-3 border rounded">
-                                                        <Badge>{analysisData.amendment_type}</Badge>
-                                                        <p className="mt-1 text-sm">{sec}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <AnalysisResultView analysisData={analysisData} />
                                 </>
                             )}
                         </CardContent>

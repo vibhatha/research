@@ -5,8 +5,9 @@ import requests
 import sys
 from pypdf import PdfReader
 
-def fetch_pdf(url: str, save_path: Path) -> Path:
-    """Downloads a PDF from a URL to the specified path."""
+
+def fetch_document(url: str, save_path: Path) -> Path:
+    """Downloads a document (PDF/HTML) from a URL to the specified path."""
     response = requests.get(url, stream=True)
     response.raise_for_status()
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -14,6 +15,9 @@ def fetch_pdf(url: str, save_path: Path) -> Path:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
     return save_path
+
+# Backward compatibility alias if needed, or just replace usage
+fetch_pdf = fetch_document
 
 def extract_text_fallback(pdf_path: Path) -> str:
     """Extracts text from a PDF using pypdf as a fallback."""
@@ -23,7 +27,7 @@ def extract_text_fallback(pdf_path: Path) -> str:
         text += page.extract_text() + "\n"
     return text
 
-def analyze_base(pdf_path: Path, api_key: str) -> dict:
+def analyze_base(doc_path: Path, api_key: str) -> dict:
     """
     Performs the base structural analysis (Summary, Sections, Entities).
     Returns dict with 'text' (JSON string) and token metrics.
@@ -33,7 +37,20 @@ def analyze_base(pdf_path: Path, api_key: str) -> dict:
     from ldf.research.categorize import DOMAIN_KEYWORDS
 
     client = genai.Client(api_key=api_key)
-    file = client.files.upload(file=pdf_path)
+    
+    # Handle Content Type
+    if doc_path.suffix.lower() in ['.html', '.htm']:
+        # For HTML, we pass the text content directly to Gemini
+        # It handles raw HTML well.
+        # TODO: check this logic with practical examples
+        try:
+            content_part = doc_path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            print(f"Warning: UTF-8 decode failed for {doc_path}, retrying with latin-1", file=sys.stderr)
+            content_part = doc_path.read_text(encoding='latin-1', errors='replace')
+    else:
+        # Default to PDF File Upload
+        content_part = client.files.upload(file=doc_path)
     
     # improved prompt with categorization
     base_prompt = f"""
@@ -74,7 +91,7 @@ def analyze_base(pdf_path: Path, api_key: str) -> dict:
     
     response = client.models.generate_content(
         model="gemini-2.0-flash",
-        contents=[file, base_prompt],
+        contents=[content_part, base_prompt],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=None, 
@@ -101,7 +118,7 @@ def analyze_base(pdf_path: Path, api_key: str) -> dict:
         "model": "gemini-2.0-flash"
     }
 
-def analyze_custom(pdf_path: Path, api_key: str, custom_prompt: str) -> dict:
+def analyze_custom(doc_path: Path, api_key: str, custom_prompt: str) -> dict:
     """
     Performs a specific user query analysis.
     Returns dict with 'answer' (string) and token metrics.
@@ -109,7 +126,15 @@ def analyze_custom(pdf_path: Path, api_key: str, custom_prompt: str) -> dict:
     from google import genai
     
     client = genai.Client(api_key=api_key)
-    file = client.files.upload(file=pdf_path)
+    
+    if doc_path.suffix.lower() in ['.html', '.htm']:
+        try:
+            content_part = doc_path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            print(f"Warning: UTF-8 decode failed for {doc_path}, retrying with latin-1", file=sys.stderr)
+            content_part = doc_path.read_text(encoding='latin-1', errors='replace')
+    else:
+        content_part = client.files.upload(file=doc_path)
     
     prompt = f"""
     You are legally analyzing this document.
@@ -120,7 +145,7 @@ def analyze_custom(pdf_path: Path, api_key: str, custom_prompt: str) -> dict:
     
     response = client.models.generate_content(
         model="gemini-2.0-flash",
-        contents=[file, prompt]
+        contents=[content_part, prompt]
     )
     
     input_tokens = 0
@@ -156,21 +181,25 @@ def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: 
     if not act_data:
         raise ValueError(f"Act with ID {doc_id} not found in {data_path}")
 
-    # Determine PDF Path
-    url_pdf = act_data['url_pdf']
-    if not url_pdf:
-        raise ValueError(f"No PDF URL found for act {doc_id}")
+    # Determine Document URL and Type
+    url_source = act_data['url_pdf']
+    if not url_source:
+        raise ValueError(f"No source URL found for act {doc_id}")
+
+    # Infer extension
+    is_html = url_source.lower().endswith('.html') or url_source.lower().endswith('.htm')
+    ext = '.html' if is_html else '.pdf'
 
     pdf_dir = project_root / 'web/public/pdfs'
     pdf_dir.mkdir(parents=True, exist_ok=True)
-    pdf_path = pdf_dir / f"{doc_id}.pdf"
+    doc_path = pdf_dir / f"{doc_id}{ext}"
     
-    if not pdf_path.exists():
-        print(f"Downloading PDF from {url_pdf}...", file=sys.stderr)
-        if url_pdf.startswith('/'):
+    if not doc_path.exists():
+        print(f"Downloading Document from {url_source}...", file=sys.stderr)
+        if url_source.startswith('/'):
              base_domain = "https://documents.gov.lk"
-             url_pdf = base_domain + url_pdf
-        fetch_pdf(url_pdf, pdf_path)
+             url_source = base_domain + url_source
+        fetch_document(url_source, doc_path)
     
     # --- Caching Logic ---
     base_json_str = None
@@ -213,7 +242,7 @@ def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: 
 
         # Run Base Analysis (Single Execution with Repair)
         print(f"Running Base Analysis for {doc_id} (force_refresh={force_refresh})...", file=sys.stderr)
-        base_res = analyze_base(pdf_path, api_key)
+        base_res = analyze_base(doc_path, api_key)
         base_json_str = base_res["text"]
         input_tokens += base_res["input_tokens"]
         output_tokens += base_res["output_tokens"]
@@ -262,7 +291,7 @@ def analyze_act_by_id(doc_id: str, api_key: str, data_path: Path, project_root: 
     # Handle Custom Prompt
     if custom_prompt:
         print(f"Running Custom Analysis for {doc_id}...", file=sys.stderr)
-        custom_res = analyze_custom(pdf_path, api_key, custom_prompt)
+        custom_res = analyze_custom(doc_path, api_key, custom_prompt)
         data["custom_analysis"] = custom_res["answer"]
         data["custom_prompt"] = custom_prompt
         input_tokens += custom_res["input_tokens"]
