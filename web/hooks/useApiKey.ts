@@ -22,6 +22,7 @@ export const useApiKey = () => {
             }
         }
 
+        // FIXME: Issue #26 (https://github.com/LDFLK/research/issues/26) - Unsafe Type Casting
         window.addEventListener("local-apikey-change", handleLocalChange as EventListener)
         window.addEventListener("storage", handleStorage)
 

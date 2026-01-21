@@ -27,6 +27,7 @@ export function BatchImport() {
                 }
             } else {
                 // Simple CSV parser
+                // FIXME: Issue #25 (https://github.com/LDFLK/research/issues/25) - Fragile CSV Parsing (quotes/commas)
                 const lines = input.split('\n').filter(l => l.trim())
                 // Assuming header "title,url,year" or no header
                 // We'll assume no header for simplicity or check first line
@@ -50,7 +51,8 @@ export function BatchImport() {
         setIsLoading(true)
         setStatus(null)
         try {
-            const res = await fetch("http://localhost:8000/acts/batch", {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+            const res = await fetch(`${apiUrl}/acts/batch`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(parsed)

@@ -407,6 +407,7 @@ export function AddActForm() {
                                                         <div
                                                             key={i}
                                                             className="mb-2 rounded-lg border bg-card p-3 cursor-pointer hover:bg-muted/50 transition-colors shadow-sm group"
+                                                            // FIXME: Issue #24 (https://github.com/LDFLK/research/issues/24) - Unstable ID Usage
                                                             onClick={() => setSelectedHistoryId(i)}
                                                         >
                                                             <div className="flex justify-between items-start mb-1 gap-2">

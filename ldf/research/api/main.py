@@ -240,6 +240,7 @@ def add_act(act: ActCreate):
                  ])
         except Exception as e:
             print(f"Failed to append to TSV: {e}", file=sys.stderr)
+            # FIXME: Issue #22 (https://github.com/LDFLK/research/issues/22) - Potential data inconsistency between DB and TSV.
             # We don't rollback DB? 
             # Ideally we should, but for this "hacky" feature, DB is primary for UI, TSV is archival.
             pass

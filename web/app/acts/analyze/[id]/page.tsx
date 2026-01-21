@@ -319,7 +319,7 @@ export default function AnalysisPage() {
                             model: data.model
                         }
                         setChatHistory(prev => [...prev, newMsg])
-                        setChatHistory(prev => [...prev, newMsg])
+
                         // setLoadingChatId(null) // Removed to fix lint
                     } else {
                         // Base Analysis Update

@@ -42,7 +42,12 @@ def analyze_base(doc_path: Path, api_key: str) -> dict:
     if doc_path.suffix.lower() in ['.html', '.htm']:
         # For HTML, we pass the text content directly to Gemini
         # It handles raw HTML well.
-        content_part = doc_path.read_text(errors='ignore')
+        # TODO: check this logic with practical examples
+        try:
+            content_part = doc_path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            print(f"Warning: UTF-8 decode failed for {doc_path}, retrying with latin-1", file=sys.stderr)
+            content_part = doc_path.read_text(encoding='latin-1', errors='replace')
     else:
         # Default to PDF File Upload
         content_part = client.files.upload(file=doc_path)
@@ -123,7 +128,11 @@ def analyze_custom(doc_path: Path, api_key: str, custom_prompt: str) -> dict:
     client = genai.Client(api_key=api_key)
     
     if doc_path.suffix.lower() in ['.html', '.htm']:
-        content_part = doc_path.read_text(errors='ignore')
+        try:
+            content_part = doc_path.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            print(f"Warning: UTF-8 decode failed for {doc_path}, retrying with latin-1", file=sys.stderr)
+            content_part = doc_path.read_text(encoding='latin-1', errors='replace')
     else:
         content_part = client.files.upload(file=doc_path)
     

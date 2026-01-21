@@ -139,6 +139,7 @@ export default function BatchAnalysisPage() {
         // For actual concurrency control we might need a pool, but Promise.all is fine for reasonable numbers (<20)
         // If users select 100, we might want to chunk it.
         // Let's rely on basic Promise.all for now.
+        // FIXME: Issue #23 (https://github.com/LDFLK/research/issues/23) - Excessive concurrency risk with Promise.all
         await Promise.all(promises.map(p => p()))
 
         setIsAnalysisRunning(false)
