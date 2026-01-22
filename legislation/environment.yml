@@ -1,4 +1,4 @@
-name: research
+name: legislation
 channels:
   - conda-forge
   - defaults

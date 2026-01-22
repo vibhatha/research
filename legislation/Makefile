@@ -1,6 +1,6 @@
 .PHONY: dump cluster-up cluster-down clean help test integration-test
 
-PYTHON=mamba run -n research python
+PYTHON=mamba run -n legislation python
 
 help:
 	@echo "Available commands:"

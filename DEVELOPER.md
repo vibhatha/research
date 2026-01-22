@@ -1,211 +1,42 @@
-# Developer Guide
+# Research Repository Developer Guide
 
-This document outlines the setup, architecture, and workflows for the Acts Navigation & Analysis system.
+This repository contains multiple research projects and tools for the **Lanka Data Foundation**.
 
-## 1. Environment Setup
+## Projects
 
-### Prerequisites
-- **Node.js** (v18+ recommended)
-- **Python** (v3.8+)
-- **Git**
+*   **Legislation** (`legislation/`): Acts Navigation & Analysis system.
+    *   [Legislation Developer Guide](legislation/DEVELOPER.md)
 
-### Installation
+*   **OCR** (`hugging-face-deepseek-ocr/`): OCR Experiments and Tools.
+    *   [OCR Developer Guide](hugging-face-deepseek-ocr/DEVELOPER.md)
 
-### Installation
+## General Best Practices
 
-1.  **Clone the Repository**:
+### 1. Project Independence
+Each project (e.g., `legislation`) is structured as its own module with its own:
+-   `environment.yml` or `requirements.txt`
+-   `DEVELOPER.md` (Project-specific setup)
+-   `tests/`
+
+### 2. Documentation
+-   **Root `DEVELOPER.md`**: This file. High-level overview and links.
+-   **Project `DEVELOPER.md`**: Specific instructions for setting up and running a single project.
+
+### 3. Tool Usage
+-   **Mamba/Conda-lock**: Use strictly defined environments to avoid conflict between research tools.
+-   **Pre-commit**: Ensure hooks are enabled to catch linting issues early.
+-   **Git Submodules**: Some external tools/data might be included as submodules; always run `git submodule update --init --recursive` after cloning.
+
+### 4. Code & Data
+-   **Data Separation**: Big datasets should not be committed. Use `dvc` or specific `data/` directories ignored by git.
+-   **Secrets**: Never commit API keys. Use `.env` files and `python-dotenv`.
+
+## Getting Started
+
+1.  Clone this repository:
     ```bash
     git clone <repo-url>
-    cd research/legislation
+    cd research
     ```
 
-2.  **Environment Setup (Mamba/Conda)**:
-    It is required to use the isolated `research` environment.
-    ```bash
-    mamba env create -f environment.yml
-    mamba activate research
-    ```
-    *Note: The environment will automatically install the `pylegislation` package in editable mode.*
-
-    **Verification**:
-    ```bash
-    mamba list pylegislation
-    pylegislation --help
-    ```
-
-3.  **Web Application setup**:
-    The web interface is built with Next.js.
-    ```bash
-    cd ui
-    npm install
-    ```
-
-
-## 2. Web Application
-
-### Running Locally
-To start the development server:
-```bash
-cd ui
-npm run dev
-```
-Visit http://localhost:3000 to view the app.
-
-### Key Components
--   **Dashboard**: `ui/components/acts/Dashboard.tsx` - Main visualization hub.
--   **Acts Table**: `ui/components/acts/ActsTable.tsx` - Searchable data table.
--   **Lineage Engine**:
-    -   `LineageView.tsx`: Visualization (timeline/tree).
-    -   `LineageEditorPage.tsx`: Full-screen editor for creating patches.
-    -   `LineagePatcher.tsx`: Quick-edit tool.
-
-## 3. Database Persistence & Backup
-
-The system uses a binary SQLite database (`database/research.db`) for operations, but supports **JSON-based backup and restore** for version control and persistence.
-
-**Standard Dump Path**: `reports/database/dump/analysis_dump.json`
-
-### Backup Data (Dump)
-Save your current analysis results and telemetry logs to JSON:
-```bash
-mamba run -n research python -m pylegislation.cli research dump-analysis reports/database/dump/analysis_dump.json
-```
-
-### Restore Data (Load)
-Load data from JSON into your local database:
-```bash
-mamba run -n research python -m pylegislation.cli research load-analysis reports/database/dump/analysis_dump.json
-```
-
-### Docker Persistence
-The Docker container is configured to **automatically restore** data from `reports/database/dump/analysis_dump.json` when it starts. 
-- Always run a dump before stopping containers/pushing code if you want to preserve new data.
-- Ensure `reports/database/dump/analysis_dump.json` is committed to Git if you want to share the dataset.
-
-## 4. Data Workflows
-
-The system uses a TSV file as the source of truth (`reports/research/archive/docs_en_with_domain.tsv`) and generates static JSON for the frontend (`acts.json`, `lineage.json`).
-
-### A. Categorization
-If new acts are added to the source, run categorization to assign domains:
-```bash
-pylegislation research categorize
-```
-
-### B. Lineage Generation (Hot-Patching)
-To generate the hierarchical data (`lineage.json`) used by the graph visualizations:
-```bash
-pylegislation research lineage
-```
-*Note: This script automatically looks for JSON patch files in `ui/public/data/patches/` and applies them to the output JSON without modifying the source TSV.*
-
-### C. Data Processing (Main Acts JSON)
-To generate the flat list of acts (`acts.json`) for the table:
-```bash
-legislation research process
-```
-
-### D. Adding a New Act
-To add a missing legislative act to the system:
-
-1.  **Edit the Archive TSV**:
-    Open `reports/research/archive/docs_en.tsv` and append a new line with the following tab-separated columns:
-    ```tsv
-    doc_type	doc_id	num	date_str	description	url_metadata	lang	url_pdf	doc_number
-    ```
-    *Example*:
-    ```tsv
-    lk_acts	public-examinations-act-25-1968	25-1968-en	1968-XX-XX	Public Examinations Act No. 25 of 1968	manual_entry	en	https://lawnet.gov.lk/...	25/1968
-    ```
-
-2.  **Run the Pipeline**:
-    execute the following commands to propagate the change:
-    ```bash
-    # 1. Assign domain and generate docs_en_with_domain.tsv
-    legislation research categorize
-
-    # 2. Update the frontend JSON (acts.json)
-    legislation research process
-
-    # 3. Update the API database
-    legislation research migrate
-    ```
-
-## 5. Data Versioning & Patching
-
-We use a version control system for the data itself to ensure integrity and history.
-
-### Roles
--   **TSV Source**: The raw data file.
--   **Patch**: A JSON file describing a lineage relationship change (e.g. "Act A amended by Act B").
--   **Version**: A snapshot of the TSV file with specific patches applied.
-
-### Workflow
-
-1.  **Create a Patch**:
-    -   Go to **Lineage Tools** in the Web App.
-    -   Select acts and define relationships.
-    -   Download the Patch JSON.
-    -   Save it to `reports/research/patches/`.
-
-
-2.  **Initialize Versioning** (First Time Only):
-    Creates `v1` from your current source.
-    ```bash
-    legislation research version init
-    ```
-
-3.  **Apply a Patch**:
-    Updates the TSV data by creating a new version (e.g., `v2`) containing the patch changes.
-    ```bash
-    legislation research version apply --file reports/research/patches/lineage_patch_NAME.json
-    ```
-    *This modifies the act descriptions in the new TSV branch (e.g., adds " (Amendment)") to verify the relationship.*
-
-4.  **List Versions**:
-    See the history of data changes.
-    ```bash
-    legislation research version list
-    ```
-
-## 6. Directory Structure
-
--   `reports/research/archive/`: Raw historical data.
--   `reports/research/versions/`: Versioned data snapshots (managed by script).
--   `reports/research/patches/`: JSON patch files.
--   `ui/public/data/`: Generated JSON files for the frontend application.
--   `scripts/`: Utilities for data processing.
-
-## 7. PYLEGISLATION Library Usage
-
-The `pylegislation` package can also be used as a Python library for custom scripts or notebooks.
-
-### Example: Custom Categorization Script
-
-```python
-from pathlib import Path
-from pylegislation.research.categorize import categorize_acts
-from pylegislation.research.process import process_acts
-
-# Define custom paths
-input_tsv = Path("my_custom_data.tsv")
-output_tsv = Path("categorized_data.tsv")
-output_json = Path("final_output.json")
-
-# Run categorization
-categorize_acts(input_tsv, output_tsv)
-
-# Process to JSON
-process_acts(output_tsv, output_json)
-```
-
-### Example: Managing Versions Programmatically
-
-```python
-from pathlib import Path
-from pylegislation.research.versions import apply_patch
-
-# Apply a specific patch
-patch_file = Path("reports/research/patches/lineage_patch_Education_Act.json")
-apply_patch(patch_file)
-```
+2.  Navigate to your specific project of interest (e.g., `legislation`) and follow its `DEVELOPER.md`.
