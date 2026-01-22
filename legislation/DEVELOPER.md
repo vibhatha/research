@@ -198,14 +198,14 @@ We use a version control system for the data itself to ensure integrity and hist
 
 ## 7. LDF Library Usage
 
-The `ldf` package can also be used as a Python library for custom scripts or notebooks.
+The `pylegislation` package can also be used as a Python library for custom scripts or notebooks.
 
 ### Example: Custom Categorization Script
 
 ```python
 from pathlib import Path
-from ldf.research.categorize import categorize_acts
-from ldf.research.process import process_acts
+from pylegislation.research.categorize import categorize_acts
+from pylegislation.research.process import process_acts
 
 # Define custom paths
 input_tsv = Path("my_custom_data.tsv")
@@ -223,7 +223,7 @@ process_acts(output_tsv, output_json)
 
 ```python
 from pathlib import Path
-from ldf.research.versions import apply_patch
+from pylegislation.research.versions import apply_patch
 
 # Apply a specific patch
 patch_file = Path("reports/research/patches/lineage_patch_Education_Act.json")
