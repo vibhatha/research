@@ -16,7 +16,7 @@ This document outlines the setup, architecture, and workflows for the Acts Navig
 1.  **Clone the Repository**:
     ```bash
     git clone <repo-url>
-    cd research
+    cd research/legislation
     ```
 
 2.  **Environment Setup (Mamba/Conda)**:
@@ -25,18 +25,18 @@ This document outlines the setup, architecture, and workflows for the Acts Navig
     mamba env create -f environment.yml
     mamba activate research
     ```
-    *Note: The environment will automatically install the `ldf` package in editable mode.*
+    *Note: The environment will automatically install the `pylegislation` package in editable mode.*
 
     **Verification**:
     ```bash
-    mamba list ldf
-    ldf --help
+    mamba list pylegislation
+    pylegislation --help
     ```
 
 3.  **Web Application setup**:
     The web interface is built with Next.js.
     ```bash
-    cd web
+    cd ui
     npm install
     ```
 
@@ -46,14 +46,14 @@ This document outlines the setup, architecture, and workflows for the Acts Navig
 ### Running Locally
 To start the development server:
 ```bash
-cd web
+cd ui
 npm run dev
 ```
 Visit http://localhost:3000 to view the app.
 
 ### Key Components
--   **Dashboard**: `web/components/acts/Dashboard.tsx` - Main visualization hub.
--   **Acts Table**: `web/components/acts/ActsTable.tsx` - Searchable data table.
+-   **Dashboard**: `ui/components/acts/Dashboard.tsx` - Main visualization hub.
+-   **Acts Table**: `ui/components/acts/ActsTable.tsx` - Searchable data table.
 -   **Lineage Engine**:
     -   `LineageView.tsx`: Visualization (timeline/tree).
     -   `LineageEditorPage.tsx`: Full-screen editor for creating patches.
@@ -61,55 +61,55 @@ Visit http://localhost:3000 to view the app.
 
 ## 3. Database Persistence & Backup
 
-The system uses a binary SQLite database (`data/research.db`) for operations, but supports **JSON-based backup and restore** for version control and persistence.
+The system uses a binary SQLite database (`database/research.db`) for operations, but supports **JSON-based backup and restore** for version control and persistence.
 
-**Standard Dump Path**: `acts/database/dump/analysis_dump.json`
+**Standard Dump Path**: `reports/database/dump/analysis_dump.json`
 
 ### Backup Data (Dump)
 Save your current analysis results and telemetry logs to JSON:
 ```bash
-mamba run -n research python -m ldf.cli research dump-analysis acts/database/dump/analysis_dump.json
+mamba run -n research python -m pylegislation.cli research dump-analysis reports/database/dump/analysis_dump.json
 ```
 
 ### Restore Data (Load)
 Load data from JSON into your local database:
 ```bash
-mamba run -n research python -m ldf.cli research load-analysis acts/database/dump/analysis_dump.json
+mamba run -n research python -m pylegislation.cli research load-analysis reports/database/dump/analysis_dump.json
 ```
 
 ### Docker Persistence
-The Docker container is configured to **automatically restore** data from `acts/database/dump/analysis_dump.json` when it starts. 
+The Docker container is configured to **automatically restore** data from `reports/database/dump/analysis_dump.json` when it starts. 
 - Always run a dump before stopping containers/pushing code if you want to preserve new data.
-- Ensure `acts/database/dump/analysis_dump.json` is committed to Git if you want to share the dataset.
+- Ensure `reports/database/dump/analysis_dump.json` is committed to Git if you want to share the dataset.
 
 ## 4. Data Workflows
 
-The system uses a TSV file as the source of truth (`acts/research/archive/docs_en_with_domain.tsv`) and generates static JSON for the frontend (`acts.json`, `lineage.json`).
+The system uses a TSV file as the source of truth (`reports/research/archive/docs_en_with_domain.tsv`) and generates static JSON for the frontend (`acts.json`, `lineage.json`).
 
 ### A. Categorization
 If new acts are added to the source, run categorization to assign domains:
 ```bash
-ldf research categorize
+pylegislation research categorize
 ```
 
 ### B. Lineage Generation (Hot-Patching)
 To generate the hierarchical data (`lineage.json`) used by the graph visualizations:
 ```bash
-ldf research lineage
+pylegislation research lineage
 ```
-*Note: This script automatically looks for JSON patch files in `web/public/data/patches/` and applies them to the output JSON without modifying the source TSV.*
+*Note: This script automatically looks for JSON patch files in `ui/public/data/patches/` and applies them to the output JSON without modifying the source TSV.*
 
 ### C. Data Processing (Main Acts JSON)
 To generate the flat list of acts (`acts.json`) for the table:
 ```bash
-ldf research process
+legislation research process
 ```
 
 ### D. Adding a New Act
 To add a missing legislative act to the system:
 
 1.  **Edit the Archive TSV**:
-    Open `acts/research/archive/docs_en.tsv` and append a new line with the following tab-separated columns:
+    Open `reports/research/archive/docs_en.tsv` and append a new line with the following tab-separated columns:
     ```tsv
     doc_type	doc_id	num	date_str	description	url_metadata	lang	url_pdf	doc_number
     ```
@@ -122,13 +122,13 @@ To add a missing legislative act to the system:
     execute the following commands to propagate the change:
     ```bash
     # 1. Assign domain and generate docs_en_with_domain.tsv
-    ldf research categorize
+    legislation research categorize
 
     # 2. Update the frontend JSON (acts.json)
-    ldf research process
+    legislation research process
 
     # 3. Update the API database
-    ldf research migrate
+    legislation research migrate
     ```
 
 ## 5. Data Versioning & Patching
@@ -146,46 +146,46 @@ We use a version control system for the data itself to ensure integrity and hist
     -   Go to **Lineage Tools** in the Web App.
     -   Select acts and define relationships.
     -   Download the Patch JSON.
-    -   Save it to `acts/research/patches/`.
+    -   Save it to `reports/research/patches/`.
 
 
 2.  **Initialize Versioning** (First Time Only):
     Creates `v1` from your current source.
     ```bash
-    ldf research version init
+    legislation research version init
     ```
 
 3.  **Apply a Patch**:
     Updates the TSV data by creating a new version (e.g., `v2`) containing the patch changes.
     ```bash
-    ldf research version apply --file acts/research/patches/lineage_patch_NAME.json
+    legislation research version apply --file reports/research/patches/lineage_patch_NAME.json
     ```
     *This modifies the act descriptions in the new TSV branch (e.g., adds " (Amendment)") to verify the relationship.*
 
 4.  **List Versions**:
     See the history of data changes.
     ```bash
-    ldf research version list
+    legislation research version list
     ```
 
 ## 6. Directory Structure
 
--   `acts/research/archive/`: Raw historical data.
--   `acts/research/versions/`: Versioned data snapshots (managed by script).
--   `acts/research/patches/`: JSON patch files.
--   `web/public/data/`: Generated JSON files for the frontend application.
+-   `reports/research/archive/`: Raw historical data.
+-   `reports/research/versions/`: Versioned data snapshots (managed by script).
+-   `reports/research/patches/`: JSON patch files.
+-   `ui/public/data/`: Generated JSON files for the frontend application.
 -   `scripts/`: Utilities for data processing.
 
-## 7. LDF Library Usage
+## 7. PYLEGISLATION Library Usage
 
-The `ldf` package can also be used as a Python library for custom scripts or notebooks.
+The `pylegislation` package can also be used as a Python library for custom scripts or notebooks.
 
 ### Example: Custom Categorization Script
 
 ```python
 from pathlib import Path
-from ldf.research.categorize import categorize_acts
-from ldf.research.process import process_acts
+from pylegislation.research.categorize import categorize_acts
+from pylegislation.research.process import process_acts
 
 # Define custom paths
 input_tsv = Path("my_custom_data.tsv")
@@ -203,9 +203,9 @@ process_acts(output_tsv, output_json)
 
 ```python
 from pathlib import Path
-from ldf.research.versions import apply_patch
+from pylegislation.research.versions import apply_patch
 
 # Apply a specific patch
-patch_file = Path("acts/research/patches/lineage_patch_Education_Act.json")
+patch_file = Path("reports/research/patches/lineage_patch_Education_Act.json")
 apply_patch(patch_file)
 ```

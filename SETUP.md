@@ -13,6 +13,9 @@ This guide details how to set up the implementation environment, manage the appl
 The project uses a dedicated Conda environment named `research` for local development and script execution.
 
 ```bash
+# Enter legislation directory
+cd legislation
+
 # Create the environment
 mamba env create -f environment.yml
 
@@ -44,10 +47,10 @@ make cluster-down
 ## 4. specific workflows
 
 ### Data Persistence & Reset
-The system uses `sqlite` (`data/research.db`).
+The system uses `sqlite` (`database/research.db`).
 - **Persistence**: Data is saved to `research.db` in the volume.
-- **Backup**: `make dump` (or `make cluster-down`) saves the DB content to `acts/database/dump/`.
-- **Restore**: On `cluster-up`, the backend checks `acts/database/dump/` and restores the latest JSON dump if the DB is empty.
+- **Backup**: `make dump` (or `make cluster-down`) saves the DB content to `reports/database/dump/`.
+- **Restore**: On `cluster-up`, the backend checks `reports/database/dump/` and restores the latest JSON dump if the DB is empty.
 
 ### Full System Reset
 To completely wipe the database and start fresh (useful for testing restoration or clearing bad data):
@@ -64,18 +67,18 @@ make cluster-up
 If you need to manually save or load data without managing the cluster:
 
 #### Dump Data
-Saves current `ActAnalysis`, `TelemetryLog`, and `AnalysisHistory` to a JSON file in `acts/database/dump/`.
+Saves current `ActAnalysis`, `TelemetryLog`, and `AnalysisHistory` to a JSON file in `reports/database/dump/`.
 ```bash
 make dump
 # OR directly via CLI
-python -m ldf.cli research dump-analysis
+python -m pylegislation.cli research dump-analysis
 ```
 
 #### Restore Data
 Loads data from a specific JSON dump file into the database.
 ```bash
 # Must be run from project root
-python -m ldf.cli research load-analysis acts/database/dump/analysis_dump_YOUR_TIMESTAMP.json
+legislation research load-analysis reports/database/dump/analysis_dump_YOUR_TIMESTAMP.json
 ```
 
 ## 5. Testing
@@ -92,7 +95,7 @@ make integration-test
 
 ## 6. Developer Notes
 
-- **CLI Tools**: The `ldf` package provides CLI tools.
-    - `python -m ldf.cli research --help`
+- **CLI Tools**: The `pylegislation` package provides CLI tools called `legislation`.
+    - `legislation research --help`
 - **Linting**:
-    - Web: `cd web && npm run lint`
+    - Web: `cd ui && npm run lint`

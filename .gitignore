@@ -49,11 +49,14 @@ Thumbs.db
 # Database
 *.db
 *.sqlite3
-!data/.gitkeep
-!docs/src/data/
-data/**
+!legislation/database/.gitkeep
+legislation/database/**
 
 # Logs
 logs/
 *.log
+
+# Build
+ldf.egg-info/
+legislation/pylegislation.egg-info/
 
