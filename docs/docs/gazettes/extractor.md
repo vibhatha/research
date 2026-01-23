@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # GztExtractor
 
-<span style={{backgroundColor: 'oklch(0.55 0.2 240)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold'}}>ALPHA</span> <span style={{color: 'gray', fontSize: '14px'}}>Research Work in Progress</span>
+<span style={{backgroundColor: 'oklch(0.55 0.2 240)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold'}}>BETA</span> <span style={{color: 'gray', fontSize: '14px'}}>Research Work in Progress</span>
 
 The **GztExtractor** is an LLM-based tool for extracting structured data from Sri Lankan gazette PDFs.
 

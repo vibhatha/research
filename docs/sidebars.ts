@@ -38,7 +38,7 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'Gazettes',
+      label: 'Gazette Analysis',
       collapsible: true,
       link: { type: 'doc', id: 'gazettes/intro' },
       items: [

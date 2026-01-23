@@ -16,5 +16,5 @@ A system for analyzing Sri Lankan legislative acts using Large Language Models (
 ### [DeepSeek OCR](./deepseek-ocr/intro)
 Research into using DeepSeek models for Optical Character Recognition (OCR), aiming to improve text extraction from scanned documents.
 
-### [Gazettes](./gazettes/intro)
+### [Gazette Analysis](./gazettes/intro)
 Tools for extracting and processing Sri Lankan government gazette data. Includes LLM-based extraction of ministry structures, amendments, and personnel appointments, along with a versioning system to track structural changes over time.
