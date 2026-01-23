@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gazettetracer"
+version = "0.1.0"
+description = "A Python project for tracing Neo4j documents."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+keywords = ["document-tracing", "python", "flask"]
+authors = [{ name = "Vibhatha Abeykoon", email = "vibhatha@example.com" }]
+maintainers = [{ name = "Vibhatha Abeykoon", email = "vibhatha@example.com" }]
+
+# Supported classifiers
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+  "numpy>=1.21",
+  "requests>=2.26",
+  "flask",
+  "flask-cors>=5.0.0",
+  "doctracer",
+  "click",
+  "openai",
+  "pdfplumber",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "flake8"]
+test = ["pytest", "coverage"]
+
+[project.urls]
+Homepage = "https://github.com/vibhatha/doctracer_examples/gazette_tracer"
+Source = "https://github.com/vibhatha/doctracer_examples/gazette_tracer"
+
+[project.scripts]
+gazetterunner = "gazettetracer.render:cli"
+doctracer = "gazettetracer.cli.extract:extract"
+
+[tool.setuptools]
+package-data = { "gazettetracer" = ["*.json", "*.yaml"] }
+packages = ["gazettetracer"]

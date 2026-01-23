@@ -21,3 +21,4 @@ This project explores OCR capabilities using DeepSeek models on the Hugging Face
 Tools for extracting and processing Sri Lankan government gazette data. This project includes:
 - **GztExtractor**: LLM-based extraction of ministry structures, amendments, and personnel appointments from gazette PDFs
 - **GztProcessor**: A versioning system to track structural changes in government organizations over time, with FastAPI backend and React frontend
+- **Gazette Tracer**: Tools for tracing and visualizing gazette relationships using Neo4j graph database, with Flask API and React UI

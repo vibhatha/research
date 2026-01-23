@@ -6,7 +6,7 @@ sidebar_position: 1
 
 <span className="status-badge status-badge--beta">BETA</span><span className="status-text">Research Work in Progress</span>
 
-The **Gazette Analysis** project provides tools for extracting and processing Sri Lankan government gazette data. It consists of two main components that work together to transform raw gazette PDFs into structured, versioned data.
+The **Gazette Analysis** project provides tools for extracting and processing Sri Lankan government gazette data. It consists of multiple components that work together to transform raw gazette PDFs into structured, versioned data.
 
 ## Overview
 
@@ -34,6 +34,14 @@ A Python library and API for tracking structural changes:
 - Maintains versioned state snapshots
 - Outputs CSVs for Neo4j integration
 - Provides a FastAPI backend with React frontend for interactive review
+
+### Gazette Tracer
+
+Tools for tracing and visualizing gazette relationships:
+- LLM-based extraction using Doctracer CLI
+- Neo4j graph database for relationship storage
+- Flask API + React UI for visualization
+- CSV data import/export capabilities
 
 ## Architecture
 

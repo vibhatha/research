@@ -45,6 +45,7 @@ const sidebars: SidebarsConfig = {
         'gazettes/extractor',
         'gazettes/processor',
         'gazettes/api-reference',
+        'gazettes/tracer',
       ]
     },
   ],
