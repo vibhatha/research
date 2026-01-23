@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Introduction
 
-<span style={{backgroundColor: 'oklch(0.55 0.2 240)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold'}}>BETA</span> <span style={{color: 'gray', fontSize: '14px'}}>Research Work in Progress</span>
+<span className="status-badge status-badge--beta">BETA</span><span className="status-text">Research Work in Progress</span>
 
 The **DeepSeek OCR** project evaluates the performance of DeepSeek-VL (Vision Language) models for Optical Character Recognition, particularly focusing on complex document structures and Sri Lankan legal texts.
 

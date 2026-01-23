@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Introduction
 
-<span style={{backgroundColor: 'oklch(0.55 0.2 240)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold'}}>ALPHA</span> <span style={{color: 'gray', fontSize: '14px'}}>Research Work in Progress</span>
+<span className="status-badge status-badge--alpha">ALPHA</span><span className="status-text">Research Work in Progress</span>
 
 The **Legislative Analysis** project focuses on making Sri Lankan legal documents more accessible and understandable through AI.
 

@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # GztProcessor
 
-<span style={{backgroundColor: 'oklch(0.55 0.2 240)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold'}}>BETA</span> <span style={{color: 'gray', fontSize: '14px'}}>Research Work in Progress</span>
+<span className="status-badge status-badge--beta">BETA</span><span className="status-text">Research Work in Progress</span>
 
 The **GztProcessor** is a Python library for tracking and versioning structural changes in Sri Lankan government gazettes. It processes the JSON output from GztExtractor and maintains a versioned state of government structure.
 

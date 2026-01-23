@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Introduction
 
-<span style={{backgroundColor: 'oklch(0.55 0.2 240)', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold'}}>BETA</span> <span style={{color: 'gray', fontSize: '14px'}}>Research Work in Progress</span>
+<span className="status-badge status-badge--beta">BETA</span><span className="status-text">Research Work in Progress</span>
 
 The **Gazette Analysis** project provides tools for extracting and processing Sri Lankan government gazette data. It consists of two main components that work together to transform raw gazette PDFs into structured, versioned data.
 
