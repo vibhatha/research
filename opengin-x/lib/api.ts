@@ -496,6 +496,113 @@ function extractFieldValue(field: unknown): unknown {
   return field;
 }
 
+/**
+ * Recursively explore a category node to find its children.
+ * Stops when reaching a node with kind.major === "Dataset".
+ */
+async function exploreNodeRecursively(
+  nodeId: string,
+  signal?: AbortSignal,
+  depth: number = 0,
+  maxDepth: number = 10,
+  visited: Set<string> = new Set()
+): Promise<CategoryNode | null> {
+  // Prevent infinite loops and excessive depth
+  if (depth > maxDepth || visited.has(nodeId) || signal?.aborted) {
+    return null;
+  }
+  visited.add(nodeId);
+
+  console.log(`[exploreNode] Depth ${depth}: Exploring node ${nodeId}`);
+
+  // Fetch entity info
+  const entityInfo = await fetchEntityById(nodeId, signal);
+  if (!entityInfo) {
+    console.log(`[exploreNode] Could not fetch entity info for ${nodeId}`);
+    return null;
+  }
+
+  const isDataset = entityInfo.kind.major === "Dataset";
+  console.log(`[exploreNode] Entity ${nodeId}: name="${entityInfo.name}", kind=${entityInfo.kind.major}/${entityInfo.kind.minor || ""}, isDataset=${isDataset}`);
+
+  const node: CategoryNode = {
+    id: nodeId,
+    name: entityInfo.name || nodeId,
+    kind: entityInfo.kind,
+    children: [],
+    attributes: [],
+    expanded: false,
+    isDataset,
+    isCategory: !isDataset,
+    depth,
+  };
+
+  // If this is a Dataset, it's a leaf node - don't explore further
+  if (isDataset) {
+    console.log(`[exploreNode] Reached Dataset at depth ${depth}: ${entityInfo.name}`);
+    return node;
+  }
+
+  // Fetch ALL relations for this node to debug what's available
+  const allRelations = await fetchEntityRelations(nodeId, undefined, signal);
+  console.log(`[exploreNode] ALL relations for ${nodeId}:`, allRelations.map(r => ({
+    name: r.name,
+    direction: r.direction,
+    relatedEntityId: r.relatedEntityId
+  })));
+
+  // Group relations by name for logging
+  const relationsByName: Record<string, number> = {};
+  allRelations.forEach(r => {
+    relationsByName[r.name] = (relationsByName[r.name] || 0) + 1;
+  });
+  console.log(`[exploreNode] Relation types for ${nodeId}:`, relationsByName);
+
+  // Find child relations - try different possible relationship names
+  // Look for relations that point to child categories/datasets
+  const childRelationNames = ["IS_ATTRIBUTE", "HAS_CHILD", "CHILD_CATEGORY", "AS_CATEGORY"];
+  const childRelations = allRelations.filter(rel =>
+    childRelationNames.includes(rel.name) ||
+    rel.name.includes("CHILD") ||
+    rel.name.includes("ATTRIBUTE")
+  );
+
+  console.log(`[exploreNode] Found ${childRelations.length} potential child relations for ${nodeId}`);
+
+  // Process child nodes (try OUTGOING first, then INCOMING if no results)
+  let relationsToProcess = childRelations.filter(rel => rel.direction === "OUTGOING");
+  if (relationsToProcess.length === 0) {
+    // Try incoming relations if no outgoing found
+    relationsToProcess = childRelations.filter(rel => rel.direction === "INCOMING");
+    console.log(`[exploreNode] No OUTGOING child relations, trying ${relationsToProcess.length} INCOMING`);
+  }
+
+  const childPromises = relationsToProcess.map(async (rel) => {
+    console.log(`[exploreNode] Following relation ${rel.name} (${rel.direction}) to ${rel.relatedEntityId}`);
+    const childNode = await exploreNodeRecursively(
+      rel.relatedEntityId,
+      signal,
+      depth + 1,
+      maxDepth,
+      visited
+    );
+    if (childNode) {
+      childNode.relationDirection = rel.direction;
+      childNode.relationId = rel.id;
+      childNode.relationName = rel.name;
+      childNode.startTime = rel.startTime;
+      childNode.endTime = rel.endTime;
+    }
+    return childNode;
+  });
+
+  const children = await Promise.all(childPromises);
+  node.children = children.filter((c): c is CategoryNode => c !== null);
+
+  console.log(`[exploreNode] Node ${nodeId} has ${node.children.length} children`);
+  return node;
+}
+
 export async function exploreEntity(
   entityId: string,
   signal?: AbortSignal
@@ -514,38 +621,43 @@ export async function exploreEntity(
       return result;
     }
 
-    // Get AS_CATEGORY relations for this entity
+    // Get AS_CATEGORY relations for this entity (top-level categories)
     const categoryRelations = await fetchEntityRelations(entityId, "AS_CATEGORY", signal);
     console.log(`[exploreEntity] Found ${categoryRelations.length} AS_CATEGORY relations:`, categoryRelations);
 
     // Store raw relations for debugging/display
     result.relations = categoryRelations;
 
-    // Fetch entity info for each related category to get names
+    // Track visited nodes to prevent cycles
+    const visited = new Set<string>();
+
+    // Recursively explore each top-level category
     const categoryPromises = categoryRelations.map(async (rel) => {
-      console.log(`[exploreEntity] Fetching entity info for: ${rel.relatedEntityId}`);
-      const entityInfo = await fetchEntityById(rel.relatedEntityId, signal);
-      console.log(`[exploreEntity] Got entity info:`, entityInfo);
+      console.log(`[exploreEntity] Starting recursive exploration for: ${rel.relatedEntityId}`);
 
-      const category = {
-        id: rel.relatedEntityId,
-        name: entityInfo?.name || rel.relatedEntityId,
-        kind: entityInfo?.kind || { major: "UNKNOWN" },
-        children: [],
-        attributes: [],
-        expanded: false,
-        relationDirection: rel.direction,
-        relationId: rel.id,
-        startTime: rel.startTime,
-        endTime: rel.endTime,
-      } as CategoryNode;
+      const categoryNode = await exploreNodeRecursively(
+        rel.relatedEntityId,
+        signal,
+        0,
+        10,
+        visited
+      );
 
-      console.log(`[exploreEntity] Created category node:`, category);
-      return category;
+      if (categoryNode) {
+        categoryNode.relationDirection = rel.direction;
+        categoryNode.relationId = rel.id;
+        categoryNode.relationName = "AS_CATEGORY";
+        categoryNode.startTime = rel.startTime;
+        categoryNode.endTime = rel.endTime;
+      }
+
+      return categoryNode;
     });
 
-    result.categories = await Promise.all(categoryPromises);
-    console.log(`[exploreEntity] Final categories:`, result.categories);
+    const categories = await Promise.all(categoryPromises);
+    result.categories = categories.filter((c): c is CategoryNode => c !== null);
+
+    console.log(`[exploreEntity] Final tree:`, JSON.stringify(result.categories, null, 2));
     result.loading = false;
   } catch (error) {
     if (signal?.aborted) {

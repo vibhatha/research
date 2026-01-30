@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Loader2, AlertCircle, Search, Folder, FolderOpen, ChevronRight, ChevronDown, ArrowUpRight, ArrowDownLeft } from "lucide-react";
+import { Loader2, AlertCircle, Search, Folder, FolderOpen, ChevronRight, ChevronDown, Database, FileBox } from "lucide-react";
 import { ExploreResult, CategoryNode } from "@/lib/types";
 
 interface AttributeExplorerProps {
@@ -13,32 +13,38 @@ interface TreeNodeProps {
   category: CategoryNode;
   isSelected: boolean;
   onSelect: (cat: CategoryNode) => void;
+  depth?: number;
 }
 
-function TreeNode({ category, isSelected, onSelect }: TreeNodeProps) {
-  const [expanded, setExpanded] = useState(false);
-  const isOutgoing = category.relationDirection === "OUTGOING";
+function TreeNode({ category, isSelected, onSelect, depth = 0 }: TreeNodeProps) {
+  const [expanded, setExpanded] = useState(depth < 2); // Auto-expand first 2 levels
+  const hasChildren = category.children && category.children.length > 0;
+  const isDataset = category.isDataset || category.kind.major === "Dataset";
 
   // Check if name is different from id (meaning we have a real name)
   const hasRealName = category.name && category.name !== category.id;
   const displayName = hasRealName ? category.name : null;
 
+  // Indentation based on depth
+  const indent = depth * 16;
+
   return (
     <div className="select-none">
       <div
-        className={`flex items-center gap-2 py-2 px-2 rounded cursor-pointer transition-colors ${
+        className={`flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer transition-colors ${
           isSelected
             ? "bg-blue-900/40 text-blue-300"
             : "hover:bg-zinc-800/50 text-zinc-300"
         }`}
+        style={{ paddingLeft: `${8 + indent}px` }}
         onClick={() => onSelect(category)}
       >
-        {/* Expand/collapse chevron */}
+        {/* Expand/collapse chevron - only show if has children */}
         <button
-          className="p-0.5 hover:bg-zinc-700 rounded flex-shrink-0"
+          className={`p-0.5 rounded flex-shrink-0 ${hasChildren ? "hover:bg-zinc-700" : "invisible"}`}
           onClick={(e) => {
             e.stopPropagation();
-            setExpanded(!expanded);
+            if (hasChildren) setExpanded(!expanded);
           }}
         >
           {expanded ? (
@@ -48,21 +54,14 @@ function TreeNode({ category, isSelected, onSelect }: TreeNodeProps) {
           )}
         </button>
 
-        {/* Folder icon */}
+        {/* Icon based on type */}
         <div className="flex-shrink-0">
-          {expanded ? (
+          {isDataset ? (
+            <Database className="w-4 h-4 text-emerald-500" />
+          ) : expanded && hasChildren ? (
             <FolderOpen className="w-4 h-4 text-yellow-500" />
           ) : (
             <Folder className="w-4 h-4 text-yellow-600" />
-          )}
-        </div>
-
-        {/* Direction indicator */}
-        <div className="flex-shrink-0">
-          {isOutgoing ? (
-            <ArrowUpRight className="w-3 h-3 text-green-500" />
-          ) : (
-            <ArrowDownLeft className="w-3 h-3 text-orange-500" />
           )}
         </div>
 
@@ -70,14 +69,26 @@ function TreeNode({ category, isSelected, onSelect }: TreeNodeProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             {displayName ? (
-              <span className="text-sm font-medium truncate">{displayName}</span>
+              <span className={`text-sm font-medium truncate ${isDataset ? "text-emerald-300" : ""}`}>
+                {displayName}
+              </span>
             ) : (
               <span className="text-sm font-mono text-zinc-400 truncate">{category.id}</span>
             )}
+            {/* Children count */}
+            {hasChildren && (
+              <span className="text-[10px] text-zinc-500">
+                ({category.children.length})
+              </span>
+            )}
           </div>
           {/* Kind info shown inline */}
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/40 text-blue-400">
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+              isDataset
+                ? "bg-emerald-900/40 text-emerald-400"
+                : "bg-blue-900/40 text-blue-400"
+            }`}>
               {category.kind.major}
             </span>
             {category.kind.minor && (
@@ -85,14 +96,42 @@ function TreeNode({ category, isSelected, onSelect }: TreeNodeProps) {
                 {category.kind.minor}
               </span>
             )}
+            {category.relationName && category.relationName !== "AS_CATEGORY" && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                {category.relationName}
+              </span>
+            )}
           </div>
         </div>
+
+        {/* Dataset indicator */}
+        {isDataset && (
+          <FileBox className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+        )}
       </div>
 
-      {/* Expanded content - full details */}
-      {expanded && (
-        <div className="ml-6 pl-4 border-l border-zinc-700 mt-1 mb-2 bg-zinc-900/50 rounded-r py-2">
-          <div className="text-xs space-y-2 px-2">
+      {/* Children - recursive rendering */}
+      {expanded && hasChildren && (
+        <div className="border-l border-zinc-800" style={{ marginLeft: `${16 + indent}px` }}>
+          {category.children.map((child) => (
+            <TreeNode
+              key={child.relationId || child.id}
+              category={child}
+              isSelected={isSelected && child.id === category.id}
+              onSelect={onSelect}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Expanded details panel */}
+      {expanded && !hasChildren && (
+        <div
+          className="border-l border-zinc-700 mt-1 mb-2 bg-zinc-900/50 rounded-r py-2"
+          style={{ marginLeft: `${24 + indent}px` }}
+        >
+          <div className="text-xs space-y-1.5 px-3">
             {/* Name */}
             <div className="flex items-start gap-2">
               <span className="text-zinc-500 w-20 flex-shrink-0">Name:</span>
@@ -104,52 +143,31 @@ function TreeNode({ category, isSelected, onSelect }: TreeNodeProps) {
             {/* Entity ID */}
             <div className="flex items-start gap-2">
               <span className="text-zinc-500 w-20 flex-shrink-0">Entity ID:</span>
-              <span className="font-mono text-zinc-300 break-all">{category.id}</span>
+              <span className="font-mono text-zinc-300 break-all text-[10px]">{category.id}</span>
             </div>
 
-            {/* Kind Major */}
+            {/* Kind */}
             <div className="flex items-start gap-2">
-              <span className="text-zinc-500 w-20 flex-shrink-0">Kind Major:</span>
-              <span className="text-blue-400">{category.kind.major}</span>
-            </div>
-
-            {/* Kind Minor */}
-            <div className="flex items-start gap-2">
-              <span className="text-zinc-500 w-20 flex-shrink-0">Kind Minor:</span>
-              <span className={category.kind.minor ? "text-purple-400" : "text-zinc-600 italic"}>
-                {category.kind.minor || "(none)"}
+              <span className="text-zinc-500 w-20 flex-shrink-0">Kind:</span>
+              <span className="text-blue-400">
+                {category.kind.major}
+                {category.kind.minor && <span className="text-purple-400">/{category.kind.minor}</span>}
               </span>
             </div>
 
-            {/* Direction */}
-            <div className="flex items-start gap-2">
-              <span className="text-zinc-500 w-20 flex-shrink-0">Direction:</span>
-              <span className={isOutgoing ? "text-green-400" : "text-orange-400"}>
-                {category.relationDirection}
-              </span>
-            </div>
-
-            {/* Start Time */}
-            {category.startTime && (
+            {/* Relation Name */}
+            {category.relationName && (
               <div className="flex items-start gap-2">
-                <span className="text-zinc-500 w-20 flex-shrink-0">Start:</span>
-                <span className="text-zinc-400">{category.startTime}</span>
+                <span className="text-zinc-500 w-20 flex-shrink-0">Relation:</span>
+                <span className="text-zinc-300">{category.relationName}</span>
               </div>
             )}
 
-            {/* End Time */}
-            {category.endTime && (
+            {/* Depth */}
+            {category.depth !== undefined && (
               <div className="flex items-start gap-2">
-                <span className="text-zinc-500 w-20 flex-shrink-0">End:</span>
-                <span className="text-zinc-400">{category.endTime}</span>
-              </div>
-            )}
-
-            {/* Relation ID */}
-            {category.relationId && (
-              <div className="flex items-start gap-2">
-                <span className="text-zinc-500 w-20 flex-shrink-0">Relation ID:</span>
-                <span className="font-mono text-zinc-500 text-[10px] break-all">{category.relationId}</span>
+                <span className="text-zinc-500 w-20 flex-shrink-0">Depth:</span>
+                <span className="text-zinc-400">{category.depth}</span>
               </div>
             )}
           </div>
@@ -157,6 +175,30 @@ function TreeNode({ category, isSelected, onSelect }: TreeNodeProps) {
       )}
     </div>
   );
+}
+
+// Helper to count total nodes in tree
+function countNodes(categories: CategoryNode[]): { total: number; datasets: number; categories: number } {
+  let total = 0;
+  let datasets = 0;
+  let cats = 0;
+
+  function count(nodes: CategoryNode[]) {
+    for (const node of nodes) {
+      total++;
+      if (node.isDataset || node.kind.major === "Dataset") {
+        datasets++;
+      } else {
+        cats++;
+      }
+      if (node.children) {
+        count(node.children);
+      }
+    }
+  }
+
+  count(categories);
+  return { total, datasets, categories: cats };
 }
 
 export default function AttributeExplorer({
@@ -171,7 +213,8 @@ export default function AttributeExplorer({
       <div className="h-full flex flex-col items-center justify-center text-zinc-500">
         <Loader2 className="w-12 h-12 animate-spin mb-4" />
         <p className="text-lg font-medium mb-1">Exploring Entity</p>
-        <p className="text-sm">Fetching categories...</p>
+        <p className="text-sm">Traversing category hierarchy...</p>
+        <p className="text-xs mt-2 text-zinc-600">This may take a moment for deep trees</p>
       </div>
     );
   }
@@ -196,8 +239,7 @@ export default function AttributeExplorer({
     );
   }
 
-  const outgoingCategories = result.categories?.filter((c) => c.relationDirection === "OUTGOING") || [];
-  const incomingCategories = result.categories?.filter((c) => c.relationDirection === "INCOMING") || [];
+  const stats = countNodes(result.categories || []);
 
   return (
     <div className="h-full flex flex-col">
@@ -211,19 +253,23 @@ export default function AttributeExplorer({
                 {result.entityId}
               </h2>
             </div>
-            <p className="text-xs text-zinc-500 mt-1">
-              {result.categories?.length || 0} categories
-              {outgoingCategories.length > 0 && (
-                <span className="text-green-500 ml-2">
-                  {outgoingCategories.length} outgoing
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-xs text-zinc-500">
+                {stats.total} nodes
+              </span>
+              {stats.categories > 0 && (
+                <span className="text-xs text-yellow-500 flex items-center gap-1">
+                  <Folder className="w-3 h-3" />
+                  {stats.categories} categories
                 </span>
               )}
-              {incomingCategories.length > 0 && (
-                <span className="text-orange-500 ml-2">
-                  {incomingCategories.length} incoming
+              {stats.datasets > 0 && (
+                <span className="text-xs text-emerald-500 flex items-center gap-1">
+                  <Database className="w-3 h-3" />
+                  {stats.datasets} datasets
                 </span>
               )}
-            </p>
+            </div>
           </div>
           <button
             onClick={() => setShowRaw(!showRaw)}
@@ -247,44 +293,18 @@ export default function AttributeExplorer({
           </pre>
         ) : (
           /* Tree View */
-          <div className="p-2">
+          <div className="py-2">
             {result.categories && result.categories.length > 0 ? (
-              <div className="space-y-0.5">
-                {/* Outgoing categories first */}
-                {outgoingCategories.length > 0 && (
-                  <div className="mb-3">
-                    <div className="text-xs text-zinc-500 px-2 py-1 flex items-center gap-1">
-                      <ArrowUpRight className="w-3 h-3 text-green-500" />
-                      Categories (Outgoing)
-                    </div>
-                    {outgoingCategories.map((cat) => (
-                      <TreeNode
-                        key={cat.relationId || cat.id}
-                        category={cat}
-                        isSelected={selectedCategory?.id === cat.id}
-                        onSelect={setSelectedCategory}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Incoming categories */}
-                {incomingCategories.length > 0 && (
-                  <div>
-                    <div className="text-xs text-zinc-500 px-2 py-1 flex items-center gap-1">
-                      <ArrowDownLeft className="w-3 h-3 text-orange-500" />
-                      Categories (Incoming)
-                    </div>
-                    {incomingCategories.map((cat) => (
-                      <TreeNode
-                        key={cat.relationId || cat.id}
-                        category={cat}
-                        isSelected={selectedCategory?.id === cat.id}
-                        onSelect={setSelectedCategory}
-                      />
-                    ))}
-                  </div>
-                )}
+              <div>
+                {result.categories.map((cat) => (
+                  <TreeNode
+                    key={cat.relationId || cat.id}
+                    category={cat}
+                    isSelected={selectedCategory?.id === cat.id}
+                    onSelect={setSelectedCategory}
+                    depth={0}
+                  />
+                ))}
               </div>
             ) : (
               <div className="text-center text-zinc-500 py-8">

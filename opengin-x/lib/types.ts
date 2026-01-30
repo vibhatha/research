@@ -104,8 +104,13 @@ export interface CategoryNode {
   // Relation metadata
   relationDirection?: string;
   relationId?: string;
+  relationName?: string;
   startTime?: string;
   endTime?: string;
+  // Node type indicators
+  isDataset?: boolean;
+  isCategory?: boolean;
+  depth?: number;
 }
 
 export interface AttributeNode {
