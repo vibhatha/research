@@ -111,6 +111,13 @@ export interface CategoryNode {
   isDataset?: boolean;
   isCategory?: boolean;
   depth?: number;
+  // Parent tracking for attribute fetching
+  parentId?: string;
+  parentName?: string;
+  // Attribute data (for Dataset leaf nodes)
+  attributeData?: AttributeValueData;
+  attributeLoading?: boolean;
+  attributeError?: string;
 }
 
 export interface AttributeNode {

@@ -415,11 +415,22 @@ async function fetchAttributeValue(
       {},
       `${EXTERNAL_API_BASE}/${encodedEntityId}/attributes/${encodedAttrName}`
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.log(`[fetchAttributeValue] Response not OK: ${response.status}`);
+      return null;
+    }
     const data = await response.json();
+    console.log(`[fetchAttributeValue] Raw response:`, JSON.stringify(data, null, 2));
+
     const decoded = decodeProtobufValues(data);
-    return decodeProtobufStruct(decoded);
-  } catch {
+    console.log(`[fetchAttributeValue] After protobuf decode:`, JSON.stringify(decoded, null, 2));
+
+    const result = decodeProtobufStruct(decoded);
+    console.log(`[fetchAttributeValue] Final result:`, result);
+
+    return result;
+  } catch (error) {
+    console.error(`[fetchAttributeValue] Error:`, error);
     return null;
   }
 }
@@ -428,27 +439,143 @@ async function fetchAttributeValue(
 function decodeProtobufStruct(data: unknown): AttributeValueData | null {
   if (!data) return null;
 
-  // Handle array of attribute values
+  console.log(`[decodeProtobufStruct] Input type:`, Array.isArray(data) ? "array" : typeof data);
+  console.log(`[decodeProtobufStruct] Input:`, JSON.stringify(data, null, 2).substring(0, 500));
+
+  // Handle array of attribute values (common response format)
   if (Array.isArray(data)) {
-    // Try to extract structured data from the first item
-    const firstItem = data[0];
-    if (firstItem && typeof firstItem === "object" && "value" in firstItem) {
-      const value = (firstItem as { value: unknown }).value;
-      return parseStructValue(value);
+    console.log(`[decodeProtobufStruct] Array with ${data.length} items`);
+
+    // Try to extract all rows from the array
+    const allRows: unknown[][] = [];
+    let columns: string[] = [];
+
+    for (let idx = 0; idx < data.length; idx++) {
+      const item = data[idx];
+      console.log(`[decodeProtobufStruct] Processing item ${idx}:`, typeof item);
+
+      if (item && typeof item === "object") {
+        const itemObj = item as Record<string, unknown>;
+        console.log(`[decodeProtobufStruct] Item ${idx} keys:`, Object.keys(itemObj));
+
+        // Check for decoded attribute format { start, end, value: { columns, rows }, _decoded: true }
+        if (itemObj._decoded && itemObj.value && typeof itemObj.value === "object") {
+          console.log(`[decodeProtobufStruct] Found _decoded item with value:`, itemObj.value);
+          const valueObj = itemObj.value as Record<string, unknown>;
+          console.log(`[decodeProtobufStruct] Value object keys:`, Object.keys(valueObj));
+
+          if ("columns" in valueObj && "rows" in valueObj) {
+            const cols = Array.isArray(valueObj.columns) ? valueObj.columns.map(String) : [];
+            const rows = Array.isArray(valueObj.rows) ? valueObj.rows as unknown[][] : [];
+            console.log(`[decodeProtobufStruct] Extracted from _decoded: ${cols.length} cols, ${rows.length} rows`);
+            if (columns.length === 0) columns = cols;
+            allRows.push(...rows);
+            continue;
+          }
+
+          // Also check if value has a nested 'data' field (common protobuf pattern)
+          if ("data" in valueObj && typeof valueObj.data === "object") {
+            const dataObj = valueObj.data as Record<string, unknown>;
+            if ("columns" in dataObj && "rows" in dataObj) {
+              const cols = Array.isArray(dataObj.columns) ? dataObj.columns.map(String) : [];
+              const rows = Array.isArray(dataObj.rows) ? dataObj.rows as unknown[][] : [];
+              console.log(`[decodeProtobufStruct] Extracted from _decoded.data: ${cols.length} cols, ${rows.length} rows`);
+              if (columns.length === 0) columns = cols;
+              allRows.push(...rows);
+              continue;
+            }
+          }
+        }
+
+        // Check for value property (protobuf wrapper) that might contain nested JSON
+        if ("value" in itemObj && typeof itemObj.value === "object" && itemObj.value !== null) {
+          const value = itemObj.value;
+          console.log(`[decodeProtobufStruct] Checking value object:`, Object.keys(value as Record<string, unknown>));
+          const parsed = parseStructValue(value);
+          if (parsed && parsed.columns.length > 0) {
+            console.log(`[decodeProtobufStruct] Parsed value: ${parsed.columns.length} cols, ${parsed.rows.length} rows`);
+            if (columns.length === 0) columns = parsed.columns;
+            allRows.push(...parsed.rows);
+            continue;
+          }
+        }
+
+        // Check for direct columns/rows structure
+        if ("columns" in itemObj && "rows" in itemObj) {
+          const cols = Array.isArray(itemObj.columns) ? itemObj.columns.map(String) : [];
+          const rows = Array.isArray(itemObj.rows) ? itemObj.rows as unknown[][] : [];
+          console.log(`[decodeProtobufStruct] Direct columns/rows: ${cols.length} cols, ${rows.length} rows`);
+          if (columns.length === 0) columns = cols;
+          allRows.push(...rows);
+          continue;
+        }
+
+        // Check for fields structure (protobuf Struct)
+        if ("fields" in itemObj && typeof itemObj.fields === "object") {
+          const fields = itemObj.fields as Record<string, unknown>;
+          const cols = Object.keys(fields);
+          console.log(`[decodeProtobufStruct] Fields structure: ${cols.length} fields`);
+          if (columns.length === 0) columns = cols;
+          allRows.push(cols.map((col) => extractFieldValue(fields[col])));
+          continue;
+        }
+
+        console.log(`[decodeProtobufStruct] Item ${idx} did not match any known pattern`);
+      }
     }
+
+    if (columns.length > 0 || allRows.length > 0) {
+      console.log(`[decodeProtobufStruct] Final result: ${columns.length} columns, ${allRows.length} rows`);
+      console.log(`[decodeProtobufStruct] Columns:`, columns);
+      return { columns, rows: allRows, raw: data };
+    }
+
+    console.log(`[decodeProtobufStruct] No data extracted from array`);
     return { columns: [], rows: [], raw: data };
   }
 
-  // Handle object with values array
+  // Handle object response
   if (typeof data === "object" && data !== null) {
     const obj = data as Record<string, unknown>;
-    if ("values" in obj && Array.isArray(obj.values)) {
-      const firstValue = obj.values[0];
-      if (firstValue && typeof firstValue === "object" && "value" in firstValue) {
-        const value = (firstValue as { value: unknown }).value;
-        return parseStructValue(value);
+    console.log(`[decodeProtobufStruct] Object keys:`, Object.keys(obj));
+
+    // Check for decoded attribute format { start, end, value: { columns, rows }, _decoded: true }
+    if (obj._decoded && obj.value && typeof obj.value === "object") {
+      const valueObj = obj.value as Record<string, unknown>;
+      console.log(`[decodeProtobufStruct] Found decoded attribute format, value keys:`, Object.keys(valueObj));
+      if ("columns" in valueObj && "rows" in valueObj) {
+        const columns = Array.isArray(valueObj.columns) ? valueObj.columns.map(String) : [];
+        const rows = Array.isArray(valueObj.rows) ? valueObj.rows as unknown[][] : [];
+        console.log(`[decodeProtobufStruct] Decoded columns/rows: ${columns.length} cols, ${rows.length} rows`);
+        return { columns, rows, raw: data };
       }
     }
+
+    // Check for values array wrapper
+    if ("values" in obj && Array.isArray(obj.values)) {
+      console.log(`[decodeProtobufStruct] Found values array with ${(obj.values as unknown[]).length} items`);
+      return decodeProtobufStruct(obj.values);
+    }
+
+    // Check for direct columns/rows structure
+    if ("columns" in obj && "rows" in obj) {
+      const columns = Array.isArray(obj.columns) ? obj.columns.map(String) : [];
+      const rows = Array.isArray(obj.rows) ? obj.rows as unknown[][] : [];
+      console.log(`[decodeProtobufStruct] Direct columns/rows: ${columns.length} cols, ${rows.length} rows`);
+      return { columns, rows, raw: data };
+    }
+
+    // Check for fields structure (protobuf Struct)
+    if ("fields" in obj && typeof obj.fields === "object") {
+      const fields = obj.fields as Record<string, unknown>;
+      const columns = Object.keys(fields);
+      const rows = [columns.map((col) => extractFieldValue(fields[col]))];
+      console.log(`[decodeProtobufStruct] Fields structure: ${columns.length} cols`);
+      return { columns, rows, raw: data };
+    }
+
+    // Try parseStructValue as fallback
+    return parseStructValue(data);
   }
 
   return { columns: [], rows: [], raw: data };
@@ -464,7 +591,21 @@ function parseStructValue(value: unknown): AttributeValueData | null {
   // Check for columns/rows structure
   if ("columns" in obj && "rows" in obj) {
     const columns = Array.isArray(obj.columns) ? obj.columns.map(String) : [];
-    const rows = Array.isArray(obj.rows) ? obj.rows as unknown[][] : [];
+    // Rows might be nested - each row might have a "values" property
+    let rows: unknown[][] = [];
+    if (Array.isArray(obj.rows)) {
+      rows = (obj.rows as unknown[]).map((row) => {
+        if (Array.isArray(row)) return row;
+        if (row && typeof row === "object" && "values" in (row as Record<string, unknown>)) {
+          const vals = (row as Record<string, unknown>).values;
+          if (Array.isArray(vals)) {
+            // Extract actual values from protobuf Value wrappers
+            return vals.map(extractFieldValue);
+          }
+        }
+        return [row];
+      });
+    }
     return { columns, rows, raw: value };
   }
 
@@ -499,13 +640,16 @@ function extractFieldValue(field: unknown): unknown {
 /**
  * Recursively explore a category node to find its children.
  * Stops when reaching a node with kind.major === "Dataset".
+ * Tracks parent info for attribute fetching.
  */
 async function exploreNodeRecursively(
   nodeId: string,
   signal?: AbortSignal,
   depth: number = 0,
   maxDepth: number = 10,
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
+  parentId?: string,
+  parentName?: string
 ): Promise<CategoryNode | null> {
   // Prevent infinite loops and excessive depth
   if (depth > maxDepth || visited.has(nodeId) || signal?.aborted) {
@@ -513,7 +657,7 @@ async function exploreNodeRecursively(
   }
   visited.add(nodeId);
 
-  console.log(`[exploreNode] Depth ${depth}: Exploring node ${nodeId}`);
+  console.log(`[exploreNode] Depth ${depth}: Exploring node ${nodeId} (parent: ${parentId})`);
 
   // Fetch entity info
   const entityInfo = await fetchEntityById(nodeId, signal);
@@ -535,11 +679,16 @@ async function exploreNodeRecursively(
     isDataset,
     isCategory: !isDataset,
     depth,
+    // Track parent for attribute fetching (important for Dataset leaf nodes)
+    parentId,
+    parentName,
   };
 
   // If this is a Dataset, it's a leaf node - don't explore further
+  // The attribute can be fetched using: GET /{parentId}/attributes/{node.name}
   if (isDataset) {
-    console.log(`[exploreNode] Reached Dataset at depth ${depth}: ${entityInfo.name}`);
+    console.log(`[exploreNode] Reached Dataset leaf at depth ${depth}: "${entityInfo.name}" (parent: ${parentId})`);
+    console.log(`[exploreNode] To fetch attribute data: GET /${parentId}/attributes/${entityInfo.name}`);
     return node;
   }
 
@@ -579,12 +728,15 @@ async function exploreNodeRecursively(
 
   const childPromises = relationsToProcess.map(async (rel) => {
     console.log(`[exploreNode] Following relation ${rel.name} (${rel.direction}) to ${rel.relatedEntityId}`);
+    // Pass current node as parent to children
     const childNode = await exploreNodeRecursively(
       rel.relatedEntityId,
       signal,
       depth + 1,
       maxDepth,
-      visited
+      visited,
+      nodeId,  // This node becomes the parent
+      entityInfo.name  // Pass parent name too
     );
     if (childNode) {
       childNode.relationDirection = rel.direction;

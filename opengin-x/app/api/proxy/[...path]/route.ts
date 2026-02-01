@@ -46,6 +46,33 @@ async function proxyRequest(
 
     const data = await response.json();
 
+    // Debug logging for attribute responses
+    if (pathString.includes('/attributes/')) {
+      const isArray = Array.isArray(data);
+      console.log(`[Proxy] Attribute response: ${isArray ? `array[${data.length}]` : 'object'}`);
+      console.log(`[Proxy] Top-level keys:`, Object.keys(data || {}));
+
+      // Check for values array (common response wrapper)
+      if (data?.values && Array.isArray(data.values)) {
+        console.log(`[Proxy] Found values array with ${data.values.length} items`);
+        if (data.values.length > 0) {
+          const firstItem = data.values[0];
+          console.log(`[Proxy] First value item keys:`, Object.keys(firstItem || {}));
+          if (firstItem?.value) {
+            const valueStr = String(firstItem.value);
+            console.log(`[Proxy] First item value (${typeof firstItem.value}, len=${valueStr.length}):`, valueStr.substring(0, 100));
+          }
+        }
+      } else if (isArray && data.length > 0) {
+        const firstItem = data[0];
+        console.log(`[Proxy] First array item keys:`, Object.keys(firstItem || {}));
+        if (firstItem?.value) {
+          const valueStr = String(firstItem.value);
+          console.log(`[Proxy] First item value (${typeof firstItem.value}, len=${valueStr.length}):`, valueStr.substring(0, 100));
+        }
+      }
+    }
+
     return NextResponse.json(data, {
       status: response.status,
       headers: {
